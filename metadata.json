@@ -1,0 +1,6 @@
+{
+  "name": "CondoGym - Gestão de Ocupação & Ponto",
+  "description": "Sistema integrado para academias de condomínio: contagem e controle de ocupação a cada 30 minutos, alertas de pico e registro de ponto de colaboradores.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
