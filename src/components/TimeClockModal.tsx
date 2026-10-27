@@ -5,8 +5,6 @@ import {
   CheckCircle2, 
   LogIn, 
   LogOut, 
-  Coffee, 
-  Play, 
   Clock, 
   ShieldCheck, 
   KeyRound,
@@ -57,21 +55,14 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
     .filter((r) => r.staffId === selectedStaff?.id && r.date === new Date().toISOString().slice(0, 10))
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  const lastPunch = selectedStaffTodayRecords.length > 0 
-    ? selectedStaffTodayRecords[selectedStaffTodayRecords.length - 1] 
+  const selectedStaffTodayPunches = selectedStaffTodayRecords.filter(
+    (record) => record.type === 'ENTRADA' || record.type === 'SAIDA'
+  );
+  const lastPunch = selectedStaffTodayPunches.length > 0
+    ? selectedStaffTodayPunches[selectedStaffTodayPunches.length - 1]
     : null;
 
-  // Determine what next punch should logically be recommended
-  let recommendedType: PunchType = 'ENTRADA';
-  if (!lastPunch || lastPunch.type === 'SAIDA') {
-    recommendedType = 'ENTRADA';
-  } else if (lastPunch.type === 'ENTRADA') {
-    recommendedType = 'INTERVALO_SAIDA';
-  } else if (lastPunch.type === 'INTERVALO_SAIDA') {
-    recommendedType = 'INTERVALO_RETORNO';
-  } else if (lastPunch.type === 'INTERVALO_RETORNO') {
-    recommendedType = 'SAIDA';
-  }
+  const recommendedType: PunchType = !lastPunch || lastPunch.type === 'SAIDA' ? 'ENTRADA' : 'SAIDA';
 
   const handlePunch = (type: PunchType) => {
     // PIN Validation
@@ -109,17 +100,10 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
     setNotes('');
   };
 
-  const getPunchTypeLabel = (type: PunchType) => {
-    switch (type) {
-      case 'ENTRADA':
-        return 'Entrada no Turno';
-      case 'INTERVALO_SAIDA':
-        return 'Saída para Intervalo';
-      case 'INTERVALO_RETORNO':
-        return 'Retorno de Intervalo';
-      case 'SAIDA':
-        return 'Saída Final do Turno';
-    }
+  const getPunchTypeLabel = (type: TimeRecord['type']) => {
+    if (type === 'ENTRADA') return 'Entrada no Turno';
+    if (type === 'SAIDA') return 'Saída Final do Turno';
+    return 'Registro antigo de intervalo';
   };
 
   return (
@@ -294,7 +278,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                       >
                         <span className="text-[#E2E8F0] font-bold">{r.time.slice(0, 5)}</span>
                         <span className="text-[#777] text-[10px]">
-                          ({r.type === 'ENTRADA' ? 'Entrada' : r.type === 'INTERVALO_SAIDA' ? 'Saída Almoço' : r.type === 'INTERVALO_RETORNO' ? 'Retorno' : 'Saída'})
+                          ({r.type === 'ENTRADA' ? 'Entrada' : r.type === 'SAIDA' ? 'Saída' : 'Registro antigo'})
                         </span>
                       </span>
                     ))}
@@ -302,13 +286,12 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                 </div>
               )}
 
-              {/* Punch Actions (4 distinct types) */}
+              {/* Punch Actions */}
               <div className="space-y-2 pt-1">
                 <label className="block text-xs font-semibold text-[#777] uppercase tracking-wider">
                   Tipo de Registro de Ponto
                 </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* 1. Entrada */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => handlePunch('ENTRADA')}
@@ -319,41 +302,10 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                     }`}
                   >
                     <LogIn className="w-5 h-5 text-[#E2E8F0]" />
-                    <span className="text-xs">1. Entrada</span>
+                    <span className="text-xs">Entrada</span>
                     <span className="text-[10px] text-[#777]">Início de turno</span>
                   </button>
 
-                  {/* 2. Saída Intervalo */}
-                  <button
-                    type="button"
-                    onClick={() => handlePunch('INTERVALO_SAIDA')}
-                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 text-center transition-all active:scale-95 ${
-                      recommendedType === 'INTERVALO_SAIDA'
-                        ? 'bg-[#00F201]/15 border-[#00F201] text-white font-bold ring-1 ring-[#00F201]'
-                        : 'bg-[#0d0d0d] border-[#2a2a2a] text-[#aaa] hover:bg-[#1a1a1a]'
-                    }`}
-                  >
-                    <Coffee className="w-5 h-5 text-[#00F201]" />
-                    <span className="text-xs">2. Saída Intervalo</span>
-                    <span className="text-[10px] text-[#777]">Almoço / Pausa</span>
-                  </button>
-
-                  {/* 3. Retorno Intervalo */}
-                  <button
-                    type="button"
-                    onClick={() => handlePunch('INTERVALO_RETORNO')}
-                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 text-center transition-all active:scale-95 ${
-                      recommendedType === 'INTERVALO_RETORNO'
-                        ? 'bg-[#ffaa00]/15 border-[#ffaa00] text-white font-bold ring-1 ring-[#ffaa00]'
-                        : 'bg-[#0d0d0d] border-[#2a2a2a] text-[#aaa] hover:bg-[#1a1a1a]'
-                    }`}
-                  >
-                    <Play className="w-5 h-5 text-[#ffaa00]" />
-                    <span className="text-xs">3. Retorno Intervalo</span>
-                    <span className="text-[10px] text-[#777]">Volta do intervalo</span>
-                  </button>
-
-                  {/* 4. Saída Final */}
                   <button
                     type="button"
                     onClick={() => handlePunch('SAIDA')}
@@ -364,7 +316,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                     }`}
                   >
                     <LogOut className="w-5 h-5 text-[#ff4444]" />
-                    <span className="text-xs">4. Saída Final</span>
+                    <span className="text-xs">Saída</span>
                     <span className="text-[10px] text-[#777]">Fim do expediente</span>
                   </button>
                 </div>

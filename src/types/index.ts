@@ -1,4 +1,5 @@
-export type PunchType = 'ENTRADA' | 'INTERVALO_SAIDA' | 'INTERVALO_RETORNO' | 'SAIDA';
+export type PunchType = 'ENTRADA' | 'SAIDA';
+export type LegacyPunchType = 'INTERVALO_SAIDA' | 'INTERVALO_RETORNO';
 
 export interface StaffMember {
   id: string;
@@ -22,7 +23,7 @@ export interface TimeRecord {
   date: string; // YYYY-MM-DD
   time: string; // HH:mm:ss
   timestamp: number;
-  type: PunchType;
+  type: PunchType | LegacyPunchType;
   location: string;
   notes?: string;
   code: string; // Electronic receipt voucher code (e.g., "PG-8492-CD")
@@ -74,12 +75,9 @@ export interface DailyStaffSummary {
   role: string;
   date: string;
   entrada?: string;
-  intervaloSaida?: string;
-  intervaloRetorno?: string;
   saida?: string;
   totalWorkedMinutes: number;
-  totalBreakMinutes: number;
-  status: 'EM_TURNO' | 'EM_INTERVALO' | 'FINALIZADO' | 'NAO_INICIADO' | 'INCOMPLETO';
+  status: 'EM_TURNO' | 'FINALIZADO' | 'NAO_INICIADO';
   records: TimeRecord[];
 }
 
@@ -92,7 +90,6 @@ export interface DayPayrollDetail {
   holidayName?: string;
   entrada?: string;
   saida?: string;
-  intervaloMinutos: number;
   workedMinutes: number;
   workedHours: number;
   baseHourlyRate: number;

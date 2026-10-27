@@ -130,7 +130,7 @@ export function exportTimeRecordsCSV(
 
   // Daily Summary per staff
   lines.push('"--- RESUMO DIÁRIO DE JORNADA (ESPELHO DE PONTO) ---"');
-  lines.push('"Colaborador";"Cargo";"Data";"Entrada";"Saída Intervalo";"Retorno Intervalo";"Saída";"Total Trabalhado";"Total Intervalo";"Status"');
+  lines.push('"Colaborador";"Cargo";"Data";"Entrada";"Saída";"Total Trabalhado";"Status"');
 
   const dates: string[] = Array.from(new Set<string>(filtered.map((r) => r.date))).sort().reverse();
   const staffToInclude = filterStaffId && filterStaffId !== 'ALL'
@@ -146,12 +146,9 @@ export function exportTimeRecordsCSV(
           staff.role,
           formatDateBR(date),
           summary.entrada || '--:--',
-          summary.intervaloSaida || '--:--',
-          summary.intervaloRetorno || '--:--',
           summary.saida || '--:--',
           formatMinutesToHours(summary.totalWorkedMinutes),
-          formatMinutesToHours(summary.totalBreakMinutes),
-          summary.status === 'EM_TURNO' ? 'Em Turno' : summary.status === 'EM_INTERVALO' ? 'Em Intervalo' : summary.status === 'FINALIZADO' ? 'Concluído' : 'Em Aberto',
+          summary.status === 'EM_TURNO' ? 'Em Turno' : summary.status === 'FINALIZADO' ? 'Concluído' : 'Em Aberto',
         ];
         lines.push(row.map((v) => `"${v}"`).join(';'));
       }
@@ -165,14 +162,11 @@ export function exportTimeRecordsCSV(
   filtered
     .sort((a, b) => b.timestamp - a.timestamp)
     .forEach((rec) => {
-      const typeLabel =
-        rec.type === 'ENTRADA'
-          ? '1. Entrada'
-          : rec.type === 'INTERVALO_SAIDA'
-          ? '2. Saída Intervalo'
-          : rec.type === 'INTERVALO_RETORNO'
-          ? '3. Retorno Intervalo'
-          : '4. Saída Final';
+      const typeLabel = rec.type === 'ENTRADA'
+        ? 'Entrada'
+        : rec.type === 'SAIDA'
+        ? 'Saída'
+        : 'Registro antigo (intervalo)';
 
       const row = [
         rec.code || '-',
@@ -243,7 +237,7 @@ export function exportMonthlyPayrollCSV(
 
   // 2. Detalhamento Dia a Dia de Cada Colaborador
   lines.push('"--- DETALHAMENTO DIÁRIO DE HORAS E VALORES CALCULADOS ---"');
-  lines.push('"Colaborador";"Data";"Dia da Semana";"Classificação do Dia";"Entrada";"Saída";"Intervalo";"Horas Trabalhadas";"Multiplicador";"Valor/Hora Aplicado";"Total do Dia (R$)"');
+  lines.push('"Colaborador";"Data";"Dia da Semana";"Classificação do Dia";"Entrada";"Saída";"Horas Trabalhadas";"Multiplicador";"Valor/Hora Aplicado";"Total do Dia (R$)"');
 
   staffList.forEach((staff) => {
     const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey);
@@ -255,7 +249,6 @@ export function exportMonthlyPayrollCSV(
         day.holidayName ? `Feriado (${day.holidayName})` : day.isSunday ? 'Domingo (Valor Dobrado 2x)' : 'Dia Regular',
         day.entrada || '--:--',
         day.saida || '--:--',
-        formatMinutesToHours(day.intervaloMinutos),
         `${day.workedHours.toFixed(2).replace('.', ',')}h`,
         `${day.multiplier}x`,
         `R$ ${day.effectiveHourlyRate.toFixed(2).replace('.', ',')}`,

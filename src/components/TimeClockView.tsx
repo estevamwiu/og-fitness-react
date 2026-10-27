@@ -7,11 +7,7 @@ import {
   Plus, 
   Filter, 
   Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Coffee,
   ChevronRight,
-  ShieldCheck,
   FileSpreadsheet
 } from 'lucide-react';
 import { StaffMember, TimeRecord, GymSettings } from '../types';
@@ -77,7 +73,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-[#777] max-w-xl">
-            Gestão de jornadas, intervalos e espelho de ponto dos instrutores e equipe da academia do condomínio.
+            Registro de entrada, saída e espelho de ponto dos instrutores e equipe da academia do condomínio.
           </p>
         </div>
 
@@ -112,7 +108,6 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {staffStatusList.map(({ staff, summary }) => {
             const isWorking = summary.status === 'EM_TURNO';
-            const isBreak = summary.status === 'EM_INTERVALO';
             const isDone = summary.status === 'FINALIZADO';
 
             return (
@@ -138,14 +133,12 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
                     className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border ${
                       isWorking
                         ? 'bg-[#E2E8F0]/10 text-[#E2E8F0] border-[#E2E8F0]/30 animate-pulse'
-                        : isBreak
-                        ? 'bg-[#00F201]/10 text-[#00F201] border-[#00F201]/30'
                         : isDone
                         ? 'bg-[#1a1a1a] text-[#888] border-[#333]'
                         : 'bg-[#0d0d0d] text-[#555] border-[#222]'
                     }`}
                   >
-                    {isWorking ? 'Em Turno' : isBreak ? 'Em Intervalo' : isDone ? 'Finalizado' : 'Não Iniciado'}
+                    {isWorking ? 'Em Turno' : isDone ? 'Finalizado' : 'Não Iniciado'}
                   </span>
                 </div>
 
@@ -230,19 +223,16 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Colaborador</th>
-                <th className="px-4 py-3">1. Entrada</th>
-                <th className="px-4 py-3">2. Saída Intervalo</th>
-                <th className="px-4 py-3">3. Retorno Intervalo</th>
-                <th className="px-4 py-3">4. Saída</th>
+                <th className="px-4 py-3">Entrada</th>
+                <th className="px-4 py-3">Saída</th>
                 <th className="px-4 py-3">Total Trabalhado</th>
-                <th className="px-4 py-3">Intervalo</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#222222] font-mono text-[#ccc]">
               {uniqueDates.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-[#555] font-sans">
+                  <td colSpan={6} className="px-4 py-8 text-center text-[#555] font-sans">
                     Nenhum registro de ponto encontrado para os filtros selecionados.
                   </td>
                 </tr>
@@ -262,22 +252,15 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
                           <div className="text-[10px] text-[#777]">{staff.role}</div>
                         </td>
                         <td className="px-4 py-3 text-[#E2E8F0] font-bold">{summary.entrada || '--:--'}</td>
-                        <td className="px-4 py-3 text-[#00F201]">{summary.intervaloSaida || '--:--'}</td>
-                        <td className="px-4 py-3 text-[#ffaa00]">{summary.intervaloRetorno || '--:--'}</td>
                         <td className="px-4 py-3 text-[#ff4444] font-bold">{summary.saida || '--:--'}</td>
                         <td className="px-4 py-3 font-bold text-white">
                           {formatMinutesToHours(summary.totalWorkedMinutes)}
-                        </td>
-                        <td className="px-4 py-3 text-[#777]">
-                          {formatMinutesToHours(summary.totalBreakMinutes)}
                         </td>
                         <td className="px-4 py-3 font-sans">
                           <span
                             className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                               summary.status === 'EM_TURNO'
                                 ? 'bg-[#E2E8F0]/10 text-[#E2E8F0] border-[#E2E8F0]/30'
-                                : summary.status === 'EM_INTERVALO'
-                                ? 'bg-[#00F201]/10 text-[#00F201] border-[#00F201]/30'
                                 : summary.status === 'FINALIZADO'
                                 ? 'bg-[#1a1a1a] text-[#888] border-[#333]'
                                 : 'bg-[#0d0d0d] text-[#555] border-[#222]'
@@ -285,8 +268,6 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
                           >
                             {summary.status === 'EM_TURNO'
                               ? 'Em Turno'
-                              : summary.status === 'EM_INTERVALO'
-                              ? 'Em Intervalo'
                               : summary.status === 'FINALIZADO'
                               ? 'Concluído'
                               : 'Aberto'}

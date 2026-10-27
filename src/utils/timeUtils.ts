@@ -116,49 +116,37 @@ export function computeDailyStaffSummary(staff: StaffMember, records: TimeRecord
     .filter((r) => r.staffId === staff.id && r.date === date)
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  const entrada = staffRecords.find((r) => r.type === 'ENTRADA')?.time;
-  const intervaloSaida = staffRecords.find((r) => r.type === 'INTERVALO_SAIDA')?.time;
-  const intervaloRetorno = staffRecords.find((r) => r.type === 'INTERVALO_RETORNO')?.time;
-  const saida = staffRecords.find((r) => r.type === 'SAIDA')?.time;
-
+  const punchRecords = staffRecords.filter((record) => record.type === 'ENTRADA' || record.type === 'SAIDA');
+  const entrada = punchRecords.find((record) => record.type === 'ENTRADA')?.time;
+  const saida = [...punchRecords].reverse().find((record) => record.type === 'SAIDA')?.time;
   let totalWorkedMinutes = 0;
-  let totalBreakMinutes = 0;
 
-  if (intervaloSaida && intervaloRetorno) {
-    totalBreakMinutes = calculateMinutesBetween(intervaloSaida, intervaloRetorno);
-  }
+  let activeEntryTime: string | undefined;
+  punchRecords.forEach((record) => {
+    if (record.type === 'ENTRADA' && !activeEntryTime) {
+      activeEntryTime = record.time;
+    } else if (record.type === 'SAIDA' && activeEntryTime) {
+      totalWorkedMinutes += calculateMinutesBetween(activeEntryTime, record.time);
+      activeEntryTime = undefined;
+    }
+  });
 
-  // If both entrada and saida exist:
-  if (entrada && saida) {
-    const grossMinutes = calculateMinutesBetween(entrada, saida);
-    totalWorkedMinutes = Math.max(0, grossMinutes - totalBreakMinutes);
-  } else if (entrada && !saida) {
-    // Current in progress
+  if (activeEntryTime) {
     const now = new Date();
     const nowTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-    
-    if (intervaloSaida && !intervaloRetorno) {
-      // In break
-      const workBeforeBreak = calculateMinutesBetween(entrada, intervaloSaida);
-      totalWorkedMinutes = workBeforeBreak;
-    } else {
-      const grossMinutes = calculateMinutesBetween(entrada, nowTime);
-      totalWorkedMinutes = Math.max(0, grossMinutes - totalBreakMinutes);
-    }
+    totalWorkedMinutes += calculateMinutesBetween(activeEntryTime, nowTime);
   }
 
   let status: DailyStaffSummary['status'] = 'NAO_INICIADO';
-  if (staffRecords.length === 0) {
-    status = 'NAO_INICIADO';
-  } else {
-    const lastRecord = staffRecords[staffRecords.length - 1];
-    if (lastRecord.type === 'ENTRADA' || lastRecord.type === 'INTERVALO_RETORNO') {
+  if (punchRecords.length > 0) {
+    const lastRecord = punchRecords[punchRecords.length - 1];
+    if (lastRecord.type === 'ENTRADA') {
       status = 'EM_TURNO';
-    } else if (lastRecord.type === 'INTERVALO_SAIDA') {
-      status = 'EM_INTERVALO';
-    } else if (lastRecord.type === 'SAIDA') {
+    } else {
       status = 'FINALIZADO';
     }
+  } else {
+    status = 'NAO_INICIADO';
   }
 
   return {
@@ -167,11 +155,8 @@ export function computeDailyStaffSummary(staff: StaffMember, records: TimeRecord
     role: staff.role,
     date,
     entrada,
-    intervaloSaida,
-    intervaloRetorno,
     saida,
     totalWorkedMinutes,
-    totalBreakMinutes,
     status,
     records: staffRecords,
   };
@@ -309,7 +294,6 @@ export function calculateMonthlyStaffPayroll(
       holidayName: specialCheck.holidayName,
       entrada: dailySummary.entrada,
       saida: dailySummary.saida,
-      intervaloMinutos: dailySummary.totalBreakMinutes,
       workedMinutes: workedMin,
       workedHours,
       baseHourlyRate: baseRate,

@@ -168,8 +168,6 @@ export function generateSeedTimeRecords(): TimeRecord[] {
     staff: StaffMember,
     dateKey: string,
     inTime: string,
-    lunchOut: string,
-    lunchIn: string,
     outTime: string
   ) => {
     records.push({
@@ -184,34 +182,6 @@ export function generateSeedTimeRecords(): TimeRecord[] {
       location: 'Academia Bloco Central',
       code: generateReceiptCode(),
     });
-
-    if (lunchOut && lunchIn) {
-      records.push({
-        id: `tr-seed-${idCounter++}`,
-        staffId: staff.id,
-        staffName: staff.name,
-        staffRole: staff.role,
-        date: dateKey,
-        time: lunchOut,
-        timestamp: new Date(`${dateKey}T${lunchOut}`).getTime(),
-        type: 'INTERVALO_SAIDA',
-        location: 'Academia Bloco Central',
-        code: generateReceiptCode(),
-      });
-
-      records.push({
-        id: `tr-seed-${idCounter++}`,
-        staffId: staff.id,
-        staffName: staff.name,
-        staffRole: staff.role,
-        date: dateKey,
-        time: lunchIn,
-        timestamp: new Date(`${dateKey}T${lunchIn}`).getTime(),
-        type: 'INTERVALO_RETORNO',
-        location: 'Academia Bloco Central',
-        code: generateReceiptCode(),
-      });
-    }
 
     if (outTime) {
       records.push({
@@ -236,33 +206,33 @@ export function generateSeedTimeRecords(): TimeRecord[] {
     const dateKey = formatDateKey(targetDate);
     const dayOfWeek = targetDate.getDay(); // 0 is Sunday, 6 is Saturday
 
-    // 1. Carlos (Mon - Fri: 06:00 to 14:00 with 1h lunch)
+    // 1. Carlos (Mon - Fri: 06:00 to 14:00)
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      addDayPunches(DEFAULT_STAFF[0], dateKey, '05:58:12', '11:30:00', '12:30:00', '14:02:15');
+      addDayPunches(DEFAULT_STAFF[0], dateKey, '05:58:12', '14:02:15');
     } else if (dayOfWeek === 6 && d % 2 === 0) {
       // Carlos Saturday shift (4 hours)
-      addDayPunches(DEFAULT_STAFF[0], dateKey, '07:00:10', '', '', '12:00:22');
+      addDayPunches(DEFAULT_STAFF[0], dateKey, '07:00:10', '12:00:22');
     }
 
-    // 2. Mariana (Mon - Fri: 14:00 to 22:00 with 1h dinner)
+    // 2. Mariana (Mon - Fri: 14:00 to 22:00)
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      addDayPunches(DEFAULT_STAFF[1], dateKey, '13:55:40', '18:00:00', '19:00:00', '22:05:30');
+      addDayPunches(DEFAULT_STAFF[1], dateKey, '13:55:40', '22:05:30');
     } else if (dayOfWeek === 0) {
       // Mariana Sunday shift (Special 2x Double Rate! 09:00 to 15:00)
-      addDayPunches(DEFAULT_STAFF[1], dateKey, '08:58:15', '12:00:00', '12:30:00', '15:02:40');
+      addDayPunches(DEFAULT_STAFF[1], dateKey, '08:58:15', '15:02:40');
     }
 
     // 3. Rafael (Personal Trainer: Mon, Wed, Fri + Sundays 2x)
     if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) {
-      addDayPunches(DEFAULT_STAFF[2], dateKey, '06:55:00', '11:00:00', '11:30:00', '15:00:00');
+      addDayPunches(DEFAULT_STAFF[2], dateKey, '06:55:00', '15:00:00');
     } else if (dayOfWeek === 0) {
       // Rafael Sunday Personal (Special 2x Double Rate! 08:00 to 13:00)
-      addDayPunches(DEFAULT_STAFF[2], dateKey, '07:55:20', '', '', '13:05:10');
+      addDayPunches(DEFAULT_STAFF[2], dateKey, '07:55:20', '13:05:10');
     }
 
     // 4. Juliana (Estagiário: Mon - Fri: 17:00 to 21:00)
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      addDayPunches(DEFAULT_STAFF[3], dateKey, '16:58:45', '', '', '21:03:12');
+      addDayPunches(DEFAULT_STAFF[3], dateKey, '16:58:45', '21:03:12');
     }
   }
 
@@ -280,31 +250,6 @@ export function generateSeedTimeRecords(): TimeRecord[] {
     location: 'Academia Bloco Central',
     code: generateReceiptCode(),
   });
-  records.push({
-    id: `tr-today-2`,
-    staffId: 'st-1',
-    staffName: 'Carlos Eduardo Silva',
-    staffRole: 'Instrutor',
-    date: todayKey,
-    time: '11:30:15',
-    timestamp: new Date(`${todayKey}T11:30:15`).getTime(),
-    type: 'INTERVALO_SAIDA',
-    location: 'Academia Bloco Central',
-    code: generateReceiptCode(),
-  });
-  records.push({
-    id: `tr-today-3`,
-    staffId: 'st-1',
-    staffName: 'Carlos Eduardo Silva',
-    staffRole: 'Instrutor',
-    date: todayKey,
-    time: '12:30:04',
-    timestamp: new Date(`${todayKey}T12:30:04`).getTime(),
-    type: 'INTERVALO_RETORNO',
-    location: 'Academia Bloco Central',
-    code: generateReceiptCode(),
-  });
-
   return records;
 }
 

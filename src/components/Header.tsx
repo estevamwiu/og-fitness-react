@@ -72,15 +72,15 @@ export const Header: React.FC<HeaderProps> = ({
   const currentCountVal = latestCount ? latestCount.count : 0;
   const occupancyRate = Math.min(100, Math.round((currentCountVal / settings.maxCapacity) * 100));
 
-  // Determine active staff on duty (last punch was ENTRADA or INTERVALO_RETORNO)
+  // Determine active staff on duty from the latest entry or exit.
   const activeStaffIds = new Set<string>();
   staffList.forEach((staff) => {
     const userRecords = timeRecords
-      .filter((r) => r.staffId === staff.id && r.date === new Date().toISOString().slice(0, 10))
+      .filter((r) => r.staffId === staff.id && r.date === new Date().toISOString().slice(0, 10) && (r.type === 'ENTRADA' || r.type === 'SAIDA'))
       .sort((a, b) => a.timestamp - b.timestamp);
     if (userRecords.length > 0) {
       const last = userRecords[userRecords.length - 1];
-      if (last.type === 'ENTRADA' || last.type === 'INTERVALO_RETORNO') {
+      if (last.type === 'ENTRADA') {
         activeStaffIds.add(staff.id);
       }
     }
