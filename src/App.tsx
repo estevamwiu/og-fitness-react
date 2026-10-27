@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useLayoutEffect, useState } from 'react';
 import { 
   BarChart3, 
   FileSpreadsheet, 
@@ -31,11 +31,16 @@ const OccupancyAnalyticsView = lazy(() => import('./components/OccupancyAnalytic
 const StaffManagementView = lazy(() => import('./components/StaffManagementView').then((module) => ({ default: module.StaffManagementView })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 
+const THEME_STORAGE_KEY = 'condogym_theme_v1';
+
 export default function App() {
   const [settings, setSettings] = useState<GymSettings>(() => storage.getSettings());
   const [staffList, setStaffList] = useState<StaffMember[]>(() => storage.getStaff());
   const [occupancyCounts, setOccupancyCounts] = useState<OccupancyCount[]>(() => storage.getOccupancy());
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>(() => storage.getTimeRecords());
+  const [theme, setTheme] = useState<'dark' | 'light'>(() =>
+    localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
+  );
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isQuickCountOpen, setIsQuickCountOpen] = useState<boolean>(false);
@@ -47,6 +52,11 @@ export default function App() {
   const [editingRecord, setEditingRecord] = useState<OccupancyCount | null>(null);
 
   const todayKey = formatDateKey(new Date());
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   const todayCounts = occupancyCounts.filter((c) => c.date === todayKey);
 
@@ -96,7 +106,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex flex-col font-sans selection:bg-[#00F201] selection:text-black">
+    <div data-theme={theme} className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex flex-col font-sans selection:bg-[#00F201] selection:text-black">
       {/* Top Header with live clock, active staff & occupancy gauge */}
       <Header
         settings={settings}
@@ -105,6 +115,8 @@ export default function App() {
         timeRecords={timeRecords}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        theme={theme}
+        onToggleTheme={() => setTheme((currentTheme) => currentTheme === 'dark' ? 'light' : 'dark')}
         onOpenTimeClock={() => setIsTimeClockOpen(true)}
         onOpenQuickCount={() => handleOpenSlotToCount()}
         onOpenSettings={() => setIsSettingsOpen(true)}

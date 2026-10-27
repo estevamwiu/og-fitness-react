@@ -243,7 +243,7 @@ export const OccupancyAnalyticsView: React.FC<OccupancyAnalyticsViewProps> = ({
                     return null;
                   }}
                 />
-                <Bar dataKey="media" radius={[6, 6, 0, 0]} animationDuration={400}>
+                <Bar dataKey="media" radius={[6, 6, 0, 0]} animationDuration={400} activeBar={false}>
                   {dayOfWeekData.map((entry, index) => {
                     const isHovered = activeBarIndex === index;
                     const baseFill = entry.media >= 20 ? '#00F201' : entry.media >= 14 ? '#00cc01' : '#333333';

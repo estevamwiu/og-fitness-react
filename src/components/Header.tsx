@@ -9,7 +9,9 @@ import {
   FileSpreadsheet, 
   Timer,
   BarChart3,
-  ShieldCheck
+  ShieldCheck,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { GymSettings, StaffMember, OccupancyCount, TimeRecord } from '../types';
 import { getNext30MinSlot, formatSecondsToCountdown } from '../utils/timeUtils';
@@ -22,6 +24,8 @@ interface HeaderProps {
   timeRecords: TimeRecord[];
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
   onOpenTimeClock: () => void;
   onOpenQuickCount: () => void;
   onOpenSettings: () => void;
@@ -34,6 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
   timeRecords,
   activeTab,
   setActiveTab,
+  theme,
+  onToggleTheme,
   onOpenTimeClock,
   onOpenQuickCount,
   onOpenSettings,
@@ -135,6 +141,15 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden md:inline text-[11px] uppercase tracking-wider">Próx. Contagem ({countdown.slot}):</span>
             <span className="font-mono font-bold text-xs">{formatSecondsToCountdown(countdown.secondsRemaining)}</span>
           </div>
+
+          <button
+            onClick={onToggleTheme}
+            className="p-1.5 text-[#777] hover:text-[#e0e0e0] hover:bg-[#1a1a1a] rounded-lg border border-transparent hover:border-[#2a2a2a] transition-colors"
+            title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+            aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
 
           <button
             onClick={onOpenSettings}
