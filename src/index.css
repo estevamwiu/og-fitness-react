@@ -90,6 +90,10 @@
   color: #15803d !important;
 }
 
+:root[data-theme="light"] .occupancy-matrix tbody td {
+  color: #000 !important;
+}
+
 :root[data-theme="light"] .recharts-cartesian-grid line {
   stroke: #cbd5e1 !important;
 }

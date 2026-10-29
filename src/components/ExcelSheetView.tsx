@@ -154,7 +154,7 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
           </div>
 
           <div className="overflow-x-auto max-h-[600px] scrollbar-thin">
-            <table className="w-full text-xs text-center border-collapse">
+            <table className="occupancy-matrix w-full text-xs text-center border-collapse">
               <thead className="sticky top-0 z-10 bg-[#0d0d0d] text-[#777] font-mono uppercase text-[11px] shadow-sm">
                 <tr>
                   <th className="sticky left-0 z-20 bg-[#0d0d0d] px-3 py-2.5 text-left border-r border-b border-[#2a2a2a] font-sans font-bold text-white min-w-[110px]">
