@@ -11,10 +11,11 @@ import {
   BarChart3,
   ShieldCheck,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from 'lucide-react';
 import { GymSettings, StaffMember, OccupancyCount, TimeRecord } from '../types';
-import { getNext30MinSlot, formatSecondsToCountdown } from '../utils/timeUtils';
+import { getNext30MinSlot, formatSecondsToCountdown, formatDateKey } from '../utils/timeUtils';
 import { soundEffects } from '../utils/audioAlert';
 
 interface HeaderProps {
@@ -29,6 +30,9 @@ interface HeaderProps {
   onOpenTimeClock: () => void;
   onOpenQuickCount: () => void;
   onOpenSettings: () => void;
+  isManager: boolean;
+  userEmail: string;
+  onSignOut: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +47,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTimeClock,
   onOpenQuickCount,
   onOpenSettings,
+  isManager,
+  userEmail,
+  onSignOut,
 }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [countdown, setCountdown] = useState({ slot: '00:00', secondsRemaining: 1800 });
@@ -76,7 +83,7 @@ export const Header: React.FC<HeaderProps> = ({
   const activeStaffIds = new Set<string>();
   staffList.forEach((staff) => {
     const userRecords = timeRecords
-      .filter((r) => r.staffId === staff.id && r.date === new Date().toISOString().slice(0, 10) && (r.type === 'ENTRADA' || r.type === 'SAIDA'))
+      .filter((r) => r.staffId === staff.id && r.date === formatDateKey() && (r.type === 'ENTRADA' || r.type === 'SAIDA'))
       .sort((a, b) => a.timestamp - b.timestamp);
     if (userRecords.length > 0) {
       const last = userRecords[userRecords.length - 1];
@@ -157,6 +164,18 @@ export const Header: React.FC<HeaderProps> = ({
             title="Configurações da Academia"
           >
             <SettingsIcon className="w-4 h-4" />
+          </button>
+          <div className="hidden sm:block text-right">
+            <p className="text-[10px] text-[#777]">{isManager ? 'GESTOR' : 'PROFESSOR'}</p>
+            <p className="max-w-40 truncate text-[10px] text-[#aaa]">{userEmail}</p>
+          </div>
+          <button
+            onClick={onSignOut}
+            className="p-1.5 text-[#777] hover:text-white hover:bg-[#1a1a1a] rounded-lg border border-transparent hover:border-[#2a2a2a]"
+            title="Sair da conta"
+            aria-label="Sair da conta"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -262,7 +281,7 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Ponto & Espelho de Horas</span>
         </button>
 
-        <button
+        {isManager && <button
           onClick={() => setActiveTab('staff')}
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
             activeTab === 'staff'
@@ -272,7 +291,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <ShieldCheck className="w-4 h-4" />
           <span>Equipe & Escala</span>
-        </button>
+        </button>}
       </div>
     </header>
   );

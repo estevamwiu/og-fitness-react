@@ -2,23 +2,30 @@ import React, { useState } from 'react';
 import { 
   Timer, 
   UserCheck, 
-  Calendar, 
   Download, 
-  Plus, 
-  Filter, 
-  Clock, 
   ChevronRight,
   FileSpreadsheet
 } from 'lucide-react';
-import { StaffMember, TimeRecord, GymSettings } from '../types';
-import { formatDateBR, computeDailyStaffSummary, formatMinutesToHours } from '../utils/timeUtils';
+import { StaffMember, TimeRecord, GymSettings, Holiday } from '../types';
+import { formatDateBR, computeDailyStaffSummary, formatMinutesToHours, formatDateKey } from '../utils/timeUtils';
 import { exportTimeRecordsCSV } from '../utils/exportExcel';
+import { MonthlyPayrollView } from './MonthlyPayrollView';
 
 interface TimeClockViewProps {
   staffList: StaffMember[];
   timeRecords: TimeRecord[];
   settings: GymSettings;
   onOpenTimeClockModal: () => void;
+  isManager: boolean;
+  currentStaffId: string | null;
+  holidays: Holiday[];
+  canImportLocalData: boolean;
+  hasLocalData: boolean;
+  isMigrationComplete: boolean;
+  onSaveHoliday: (holiday: Holiday) => Promise<void>;
+  onDeleteHoliday: (date: string) => Promise<void>;
+  onImportLocalData: () => Promise<void>;
+  onCompleteMigration: () => Promise<void>;
 }
 
 export const TimeClockView: React.FC<TimeClockViewProps> = ({
@@ -26,13 +33,26 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
   timeRecords,
   settings,
   onOpenTimeClockModal,
+  isManager,
+  currentStaffId,
+  holidays,
+  canImportLocalData,
+  hasLocalData,
+  isMigrationComplete,
+  onSaveHoliday,
+  onDeleteHoliday,
+  onImportLocalData,
+  onCompleteMigration,
 }) => {
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>('ALL');
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const [selectedMonth, setSelectedMonth] = useState<string>(formatDateKey().slice(0, 7));
+  const todayKey = formatDateKey();
 
   // Compute status for all staff today
-  const staffStatusList = staffList.map((staff) => {
+  const staffVisibleToUser = isManager
+    ? staffList
+    : staffList.filter((staff) => staff.id === currentStaffId);
+  const staffStatusList = staffVisibleToUser.map((staff) => {
     const summary = computeDailyStaffSummary(staff, timeRecords, todayKey);
     return {
       staff,
@@ -56,6 +76,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
     : staffList;
 
   const handleExport = () => {
+    if (!isManager) return;
     exportTimeRecordsCSV(timeRecords, staffList, settings, selectedStaffFilter, selectedMonth);
   };
 
@@ -78,18 +99,21 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#0d0d0d] hover:bg-[#1a1a1a] text-[#e0e0e0] font-semibold rounded-xl text-xs border border-[#2a2a2a] transition-all"
-            id="btn-export-ponto"
-          >
-            <Download className="w-4 h-4 text-[#00F201]" />
-            <span>Exportar Espelho (CSV/Excel)</span>
-          </button>
+          {isManager && (
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#0d0d0d] hover:bg-[#1a1a1a] text-[#e0e0e0] font-semibold rounded-xl text-xs border border-[#2a2a2a] transition-all"
+              id="btn-export-ponto"
+            >
+              <Download className="w-4 h-4 text-[#00F201]" />
+              <span>Exportar Espelho (CSV/Excel)</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenTimeClockModal}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#00F201] hover:bg-[#00cc01] text-black font-bold rounded-xl text-xs shadow-lg shadow-[#00F201]/20 transition-all active:scale-95"
+            disabled={!isManager && !currentStaffId}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#00F201] hover:bg-[#00cc01] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-xl text-xs shadow-lg shadow-[#00F201]/20 transition-all active:scale-95"
             id="btn-bater-ponto-view"
           >
             <Timer className="w-4 h-4 text-black" />
@@ -97,6 +121,12 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
           </button>
         </div>
       </div>
+
+      {!isManager && !currentStaffId && (
+        <p role="alert" className="rounded-xl border border-[#ffaa00]/30 bg-[#ffaa00]/10 p-4 text-xs text-[#ffcc66]">
+          Sua conta ainda não está vinculada ao cadastro de um colaborador. Peça a um gestor para vincular seu e-mail na tela Equipe.
+        </p>
+      )}
 
       {/* Live Staff Shift Cards (Today's Real-Time Status) */}
       <div>
@@ -152,12 +182,14 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
                     <span>Entrada hoje:</span>
                     <span className="font-mono text-white font-semibold">{summary.entrada || '--:--'}</span>
                   </div>
-                  <div className="flex justify-between text-[#777] text-[11px]">
-                    <span>Horas trabalhadas:</span>
-                    <span className="font-mono text-[#E2E8F0] font-bold">
-                      {formatMinutesToHours(summary.totalWorkedMinutes)}
-                    </span>
-                  </div>
+                  {isManager && (
+                    <div className="flex justify-between text-[#777] text-[11px]">
+                      <span>Horas trabalhadas:</span>
+                      <span className="font-mono text-[#E2E8F0] font-bold">
+                        {formatMinutesToHours(summary.totalWorkedMinutes)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2.5 border-t border-[#222] flex items-center justify-between text-[11px]">
@@ -176,7 +208,26 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
         </div>
       </div>
 
+      {isManager && (
+        <MonthlyPayrollView
+          staffList={staffList}
+          timeRecords={timeRecords}
+          settings={settings}
+          month={selectedMonth}
+          onMonthChange={setSelectedMonth}
+          holidays={holidays}
+          canImportLocalData={canImportLocalData}
+          hasLocalData={hasLocalData}
+          isMigrationComplete={isMigrationComplete}
+          onSaveHoliday={onSaveHoliday}
+          onDeleteHoliday={onDeleteHoliday}
+          onImportLocalData={onImportLocalData}
+          onCompleteMigration={onCompleteMigration}
+        />
+      )}
+
       {/* Espelho de Ponto Table */}
+      {isManager && (
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl overflow-hidden shadow-xl">
         {/* Table Filter Controls */}
         <div className="p-4 bg-[#141414] border-b border-[#2a2a2a] flex flex-wrap items-center justify-between gap-3">
@@ -196,23 +247,13 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
               >
                 <option value="ALL" className="bg-[#141414] text-white">Todos os Colaboradores</option>
                 {staffList.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-[#141414] text-white">
-                    {s.name} ({s.role})
-                  </option>
-                ))}
-              </select>
+                    <option key={s.id} value={s.id} className="bg-[#141414] text-white">
+                      {s.name} ({s.role})
+                    </option>
+                  ))}
+                </select>
             </div>
 
-            {/* Filter by Month */}
-            <div className="flex items-center gap-1.5 bg-[#0d0d0d] px-3 py-1.5 rounded-xl border border-[#2a2a2a] font-mono">
-              <Calendar className="w-3.5 h-3.5 text-[#777]" />
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-white focus:outline-none cursor-pointer"
-              />
-            </div>
           </div>
         </div>
 
@@ -282,6 +323,12 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
           </table>
         </div>
       </div>
+      )}
+      {!isManager && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 text-xs text-[#777]">
+          Seu acesso permite registrar o próprio ponto. O espelho de horas e os dados salariais são restritos aos gestores.
+        </div>
+      )}
     </div>
   );
 };

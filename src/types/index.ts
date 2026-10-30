@@ -5,7 +5,7 @@ export interface StaffMember {
   id: string;
   name: string;
   role: 'Instrutor' | 'Personal Trainer' | 'Estagiário' | 'Coordenador' | 'Recepcionista';
-  pin: string;
+  pin?: string;
   email?: string;
   phone?: string;
   avatar?: string;
@@ -13,6 +13,7 @@ export interface StaffMember {
   active: boolean;
   scheduledShift: string; // e.g. "06:00 - 14:00", "14:00 - 22:00"
   hourlyRate: number; // Valor pago por hora em R$ (ex: 45.00)
+  hasLoginAccount?: boolean;
 }
 
 export interface TimeRecord {
@@ -116,4 +117,9 @@ export interface MonthlyPayrollSummary {
   totalGrossSalary: number; // regularEarnings + sundayHolidayEarnings
   daysWorkedCount: number;
   daysBreakdown: DayPayrollDetail[];
+}
+
+export interface Holiday {
+  date: string;
+  name: string;
 }

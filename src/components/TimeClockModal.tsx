@@ -7,14 +7,13 @@ import {
   LogOut, 
   Clock, 
   ShieldCheck, 
-  KeyRound,
   Download,
   Printer,
   Sparkles,
   MapPin
 } from 'lucide-react';
 import { StaffMember, TimeRecord, PunchType, GymSettings } from '../types';
-import { generateReceiptCode, formatDateBR } from '../utils/timeUtils';
+import { formatDateBR, formatDateKey } from '../utils/timeUtils';
 import { soundEffects } from '../utils/audioAlert';
 
 interface TimeClockModalProps {
@@ -22,8 +21,10 @@ interface TimeClockModalProps {
   onClose: () => void;
   staffList: StaffMember[];
   todayRecords: TimeRecord[];
-  onSaveRecord: (record: TimeRecord) => void;
+  onSaveRecord: (record: Pick<TimeRecord, 'staffId' | 'type' | 'location' | 'notes'>) => Promise<TimeRecord>;
   settings: GymSettings;
+  isManager: boolean;
+  currentStaffId: string | null;
 }
 
 export const TimeClockModal: React.FC<TimeClockModalProps> = ({
@@ -33,13 +34,15 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
   todayRecords,
   onSaveRecord,
   settings,
+  isManager,
+  currentStaffId,
 }) => {
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
-  const [pinInput, setPinInput] = useState<string>('');
-  const [pinError, setPinError] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(currentStaffId || staffList[0]?.id || '');
   const [notes, setNotes] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [receiptRecord, setReceiptRecord] = useState<TimeRecord | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSavingPunch, setIsSavingPunch] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -48,11 +51,14 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
 
   if (!isOpen) return null;
 
-  const selectedStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
+  const selectableStaff = isManager ? staffList.filter((staff) => staff.active) : staffList;
+  const selectedStaff = isManager
+    ? selectableStaff.find((s) => s.id === selectedStaffId) || selectableStaff[0]
+    : staffList.find((s) => s.id === currentStaffId);
 
   // Records for selected staff today
   const selectedStaffTodayRecords = todayRecords
-    .filter((r) => r.staffId === selectedStaff?.id && r.date === new Date().toISOString().slice(0, 10))
+    .filter((r) => r.staffId === selectedStaff?.id && r.date === formatDateKey())
     .sort((a, b) => a.timestamp - b.timestamp);
 
   const selectedStaffTodayPunches = selectedStaffTodayRecords.filter(
@@ -64,40 +70,29 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
 
   const recommendedType: PunchType = !lastPunch || lastPunch.type === 'SAIDA' ? 'ENTRADA' : 'SAIDA';
 
-  const handlePunch = (type: PunchType) => {
-    // PIN Validation
-    if (selectedStaff.pin && pinInput !== selectedStaff.pin) {
-      setPinError('PIN de segurança incorreto. Digite os 4 dígitos cadastrados.');
-      return;
-    }
-
-    setPinError(null);
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10);
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-
-    const newRecord: TimeRecord = {
-      id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+  const handlePunch = async (type: PunchType) => {
+    if (!selectedStaff) return;
+    const punch = {
       staffId: selectedStaff.id,
-      staffName: selectedStaff.name,
-      staffRole: selectedStaff.role,
-      date: dateKey,
-      time: timeStr,
-      timestamp: now.getTime(),
       type,
       location: `${settings.condoName} - ${settings.unitAddress}`,
       notes: notes.trim() || undefined,
-      code: generateReceiptCode(),
     };
 
-    if (settings.soundAlertEnabled) {
-      soundEffects.playSuccessSound();
+    setSaveError(null);
+    setIsSavingPunch(true);
+    try {
+      const savedRecord = await onSaveRecord(punch);
+      if (settings.soundAlertEnabled) {
+        soundEffects.playSuccessSound();
+      }
+      setReceiptRecord(savedRecord);
+      setNotes('');
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Não foi possível registrar o ponto.');
+    } finally {
+      setIsSavingPunch(false);
     }
-
-    onSaveRecord(newRecord);
-    setReceiptRecord(newRecord);
-    setPinInput('');
-    setNotes('');
   };
 
   const getPunchTypeLabel = (type: TimeRecord['type']) => {
@@ -206,19 +201,18 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                 </div>
               </div>
 
-              {/* Staff Member Selector */}
-              <div>
+              {/* Only managers can choose on whose behalf they register a punch. */}
+              {isManager ? <div>
                 <label className="block text-xs font-semibold text-[#777] uppercase tracking-wider mb-2">
                   Selecione o Colaborador
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {staffList.map((staff) => (
+                  {selectableStaff.map((staff) => (
                     <button
                       key={staff.id}
                       type="button"
                       onClick={() => {
                         setSelectedStaffId(staff.id);
-                        setPinError(null);
                       }}
                       className={`p-2.5 rounded-xl border text-left flex items-center gap-3 transition-all ${
                         selectedStaffId === staff.id
@@ -239,33 +233,16 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* PIN Code Security Field */}
-              <div className="bg-[#0d0d0d] p-3.5 rounded-xl border border-[#2a2a2a] space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-[#ccc] flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-[#00F201]" />
-                    <span>PIN de 4 Dígitos do Colaborador</span>
-                  </label>
-                  <span className="text-[10px] text-[#555]">Padrão demo: {selectedStaff?.pin}</span>
+              </div> : (
+                <div className="rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] p-3 text-xs text-[#aaa]">
+                  {selectedStaff
+                    ? <>Registro de ponto para <strong className="text-white">{selectedStaff.name}</strong></>
+                    : 'Seu cadastro ainda não foi vinculado a um colaborador. Solicite ajuda a um gestor.'}
                 </div>
-                <input
-                  type="password"
-                  maxLength={4}
-                  placeholder="••••"
-                  value={pinInput}
-                  onChange={(e) => {
-                    setPinInput(e.target.value);
-                    setPinError(null);
-                  }}
-                  className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-center text-lg font-mono tracking-widest text-white focus:outline-none focus:border-[#00F201]"
-                />
-                {pinError && <p className="text-xs text-[#ff4444] font-medium">{pinError}</p>}
-              </div>
+              )}
 
               {/* Today's Punch Timeline for this staff */}
-              {selectedStaffTodayRecords.length > 0 && (
+              {isManager && selectedStaffTodayRecords.length > 0 && (
                 <div className="bg-[#0d0d0d] p-3 rounded-xl border border-[#2a2a2a]">
                   <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider mb-2">
                     Batidas de Hoje ({selectedStaff.name.split(' ')[0]})
@@ -300,6 +277,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                         ? 'bg-[#E2E8F0]/15 border-[#E2E8F0] text-white font-bold ring-1 ring-[#E2E8F0]'
                         : 'bg-[#0d0d0d] border-[#2a2a2a] text-[#aaa] hover:bg-[#1a1a1a]'
                     }`}
+                    disabled={isSavingPunch || !selectedStaff?.active}
                   >
                     <LogIn className="w-5 h-5 text-[#E2E8F0]" />
                     <span className="text-xs">Entrada</span>
@@ -314,6 +292,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                         ? 'bg-[#ff4444]/15 border-[#ff4444] text-white font-bold ring-1 ring-[#ff4444]'
                         : 'bg-[#0d0d0d] border-[#2a2a2a] text-[#aaa] hover:bg-[#1a1a1a]'
                     }`}
+                    disabled={isSavingPunch || !selectedStaff?.active}
                   >
                     <LogOut className="w-5 h-5 text-[#ff4444]" />
                     <span className="text-xs">Saída</span>
@@ -332,6 +311,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                   className="w-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-[#00F201]"
                 />
               </div>
+              {saveError && <p role="alert" className="text-xs text-[#ff7777]">{saveError}</p>}
             </div>
           </>
         )}

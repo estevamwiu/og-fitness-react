@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useLayoutEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { 
   BarChart3, 
   FileSpreadsheet, 
@@ -16,10 +17,28 @@ import {
   Sparkles,
   Dumbbell
 } from 'lucide-react';
-import { GymSettings, StaffMember, OccupancyCount, TimeRecord } from './types';
+import { GymSettings, StaffMember, OccupancyCount, TimeRecord, Holiday } from './types';
 import { storage } from './utils/storage';
 import { formatDateKey } from './utils/timeUtils';
 import { Header } from './components/Header';
+import { LoginView } from './components/LoginView';
+import {
+  deleteHoliday,
+  fetchHolidays,
+  fetchPayrollMigrationStatus,
+  fetchProfile,
+  fetchStaff,
+  fetchTimeRecords,
+  getSupabase,
+  importLocalPayrollData,
+  isSupabaseConfigured,
+  completePayrollMigration,
+  linkStaffAccount,
+  saveHoliday,
+  saveStaff,
+  registerTimePunch,
+  UserProfile,
+} from './utils/supabase';
 
 const NextCountReminderBanner = lazy(() => import('./components/NextCountReminderBanner').then((module) => ({ default: module.NextCountReminderBanner })));
 const SlotTimeline30Min = lazy(() => import('./components/SlotTimeline30Min').then((module) => ({ default: module.SlotTimeline30Min })));
@@ -35,9 +54,18 @@ const THEME_STORAGE_KEY = 'condogym_theme_v1';
 
 export default function App() {
   const [settings, setSettings] = useState<GymSettings>(() => storage.getSettings());
-  const [staffList, setStaffList] = useState<StaffMember[]>(() => storage.getStaff());
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [occupancyCounts, setOccupancyCounts] = useState<OccupancyCount[]>(() => storage.getOccupancy());
-  const [timeRecords, setTimeRecords] = useState<TimeRecord[]>(() => storage.getTimeRecords());
+  const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [hasLocalPayrollData, setHasLocalPayrollData] = useState(() => storage.hasLocalPayrollData());
+  const [isMigrationComplete, setIsMigrationComplete] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
   );
@@ -53,6 +81,93 @@ export default function App() {
 
   const todayKey = formatDateKey(new Date());
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let active = true;
+    const supabase = getSupabase();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (active) {
+        setSession(nextSession);
+        setAuthError(null);
+      }
+    });
+
+    Promise.all([supabase.auth.getSession(), fetchPayrollMigrationStatus()])
+      .then(([{ data, error }, isMigrated]) => {
+        if (error) throw error;
+        if (isMigrated) {
+          storage.clearLocalPayrollData();
+          setHasLocalPayrollData(false);
+        }
+        if (active) {
+          setIsMigrationComplete(isMigrated);
+          setSession(data.session);
+        }
+      })
+      .catch((reason) => {
+        if (active) setAuthError(reason instanceof Error ? reason.message : 'Não foi possível verificar a sessão.');
+      })
+      .finally(() => {
+        if (active) setIsAuthLoading(false);
+      });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!session) {
+      setProfile(null);
+      setStaffList([]);
+      setTimeRecords([]);
+      setHolidays([]);
+      setIsDataLoading(false);
+      setDataError(null);
+      return;
+    }
+
+    let active = true;
+    setIsDataLoading(true);
+    setDataError(null);
+    setProfile(null);
+    setStaffList([]);
+    setTimeRecords([]);
+    setHolidays([]);
+
+    fetchProfile(session.user.id)
+      .then(async (userProfile) => {
+        const isManager = userProfile.role === 'manager';
+        const [staff, records, customHolidays] = await Promise.all([
+          fetchStaff(isManager),
+          fetchTimeRecords(),
+          isManager ? fetchHolidays() : Promise.resolve([]),
+        ]);
+        if (active) {
+          setProfile(userProfile);
+          setStaffList(staff);
+          setTimeRecords(records);
+          setHolidays(customHolidays);
+          if (!isManager) setActiveTab('timeclock');
+        }
+      })
+      .catch((reason) => {
+        if (active) setDataError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados.');
+      })
+      .finally(() => {
+        if (active) setIsDataLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session]);
+
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -65,9 +180,15 @@ export default function App() {
     storage.saveSettings(newSettings);
   };
 
-  const handleSaveStaffList = (newList: StaffMember[]) => {
-    setStaffList(newList);
-    storage.saveStaff(newList);
+  const handleSaveStaffList = async (newList: StaffMember[]) => {
+    await saveStaff(newList);
+    setStaffList(await fetchStaff(true));
+  };
+
+  const handleLinkStaffAccount = async (staff: StaffMember) => {
+    if (!staff.email) throw new Error('Cadastre o e-mail do colaborador antes de vincular a conta.');
+    await linkStaffAccount(staff.email, staff.id);
+    setStaffList(await fetchStaff(true));
   };
 
   const handleSaveCount = (newCount: OccupancyCount) => {
@@ -92,10 +213,46 @@ export default function App() {
     storage.saveOccupancy(updated);
   };
 
-  const handleSaveTimeRecord = (record: TimeRecord) => {
-    const updated = [record, ...timeRecords];
-    setTimeRecords(updated);
-    storage.saveTimeRecords(updated);
+  const handleSaveTimeRecord = async (
+    record: Pick<TimeRecord, 'staffId' | 'type' | 'location' | 'notes'>,
+  ): Promise<TimeRecord> => {
+    if (record.type !== 'ENTRADA' && record.type !== 'SAIDA') {
+      throw new Error('Tipo de batida inválido.');
+    }
+    const savedRecord = await registerTimePunch(record.staffId, record.type, record.location, record.notes);
+    setTimeRecords((records) => [savedRecord, ...records]);
+    return savedRecord;
+  };
+
+  const handleSaveHoliday = async (holiday: Holiday) => {
+    await saveHoliday(holiday);
+    setHolidays(await fetchHolidays());
+  };
+
+  const handleDeleteHoliday = async (date: string) => {
+    await deleteHoliday(date);
+    setHolidays(await fetchHolidays());
+  };
+
+  const handleImportLocalData = async () => {
+    const localData = storage.getLocalPayrollData();
+    if (!localData) throw new Error('Não há dados locais de equipe ou ponto para importar.');
+    await importLocalPayrollData(localData.staff, localData.records);
+    storage.clearLocalPayrollData();
+    setHasLocalPayrollData(false);
+    const [staff, records] = await Promise.all([fetchStaff(true), fetchTimeRecords()]);
+    setStaffList(staff);
+    setTimeRecords(records);
+  };
+
+  const handleCompleteMigration = async () => {
+    if (hasLocalPayrollData) {
+      throw new Error('Importe os dados locais deste navegador antes de finalizar a migração.');
+    }
+    await completePayrollMigration();
+    storage.clearLocalPayrollData();
+    setHasLocalPayrollData(false);
+    setIsMigrationComplete(true);
   };
 
   const handleOpenSlotToCount = (slot?: string, date?: string, existing?: OccupancyCount) => {
@@ -104,6 +261,56 @@ export default function App() {
     setEditingRecord(existing || null);
     setIsQuickCountOpen(true);
   };
+
+  const handleSignOut = async () => {
+    const { error } = await getSupabase().auth.signOut();
+    if (error) setAuthError(error.message);
+  };
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
+        <div className="max-w-lg rounded-2xl border border-[#2a2a2a] bg-[#141414] p-6">
+          <h1 className="text-lg font-bold">Configure o acesso seguro</h1>
+          <p className="mt-2 text-sm text-[#aaa]">
+            Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env e execute o esquema de supabase/schema.sql no SQL Editor do seu projeto.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthLoading) {
+    return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Verificando acesso...</div>;
+  }
+
+  if (!session) {
+    return (
+      <>
+        <LoginView />
+        {authError && <p role="alert" className="fixed bottom-4 left-4 right-4 text-center text-sm text-[#ff7777]">{authError}</p>}
+      </>
+    );
+  }
+
+  if (isDataLoading || (profile && profile.id !== session.user.id)) {
+    return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Carregando dados protegidos...</div>;
+  }
+
+  if (!profile || dataError) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
+        <div className="max-w-lg rounded-2xl border border-[#2a2a2a] bg-[#141414] p-6 space-y-4">
+          <h1 className="text-lg font-bold">Não foi possível carregar seu perfil</h1>
+          <p role="alert" className="text-sm text-[#ff9999]">{dataError || 'Perfil não encontrado no banco de dados.'}</p>
+          <p className="text-xs text-[#888]">Confirme a configuração do banco e o cadastro do perfil antes de tentar novamente.</p>
+          <button onClick={handleSignOut} className="rounded-lg bg-[#00F201] px-4 py-2 text-sm font-bold text-black">Sair</button>
+        </div>
+      </div>
+    );
+  }
+
+  const isManager = profile.role === 'manager';
 
   return (
     <div data-theme={theme} className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex flex-col font-sans selection:bg-[#00F201] selection:text-black">
@@ -120,10 +327,18 @@ export default function App() {
         onOpenTimeClock={() => setIsTimeClockOpen(true)}
         onOpenQuickCount={() => handleOpenSlotToCount()}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        isManager={isManager}
+        userEmail={session.user.email || ''}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 space-y-6">
+        {authError && (
+          <p role="alert" className="rounded-lg border border-[#ff4444]/30 bg-[#ff4444]/10 p-3 text-xs text-[#ff9999]">
+            {authError}
+          </p>
+        )}
         <Suspense fallback={<div className="py-12 text-center text-sm text-[#777]">Carregando...</div>}>
         {/* Tab 1: Dashboard (Live 30-min Timeline + Reminder + Charts) */}
         {activeTab === 'dashboard' && (
@@ -169,14 +384,25 @@ export default function App() {
             timeRecords={timeRecords}
             settings={settings}
             onOpenTimeClockModal={() => setIsTimeClockOpen(true)}
+            isManager={isManager}
+            currentStaffId={profile.staffId}
+            holidays={holidays}
+            canImportLocalData={isManager && hasLocalPayrollData && !isMigrationComplete}
+            hasLocalData={hasLocalPayrollData}
+            isMigrationComplete={isMigrationComplete}
+            onSaveHoliday={handleSaveHoliday}
+            onDeleteHoliday={handleDeleteHoliday}
+            onImportLocalData={handleImportLocalData}
+            onCompleteMigration={handleCompleteMigration}
           />
         )}
 
         {/* Tab 4: Staff & Shift Schedule */}
-        {activeTab === 'staff' && (
+        {activeTab === 'staff' && isManager && (
           <StaffManagementView
             staffList={staffList}
             onSaveStaffList={handleSaveStaffList}
+            onLinkAccount={handleLinkStaffAccount}
             timeRecords={timeRecords}
             settings={settings}
           />
@@ -237,6 +463,8 @@ export default function App() {
         todayRecords={timeRecords}
         onSaveRecord={handleSaveTimeRecord}
         settings={settings}
+        isManager={isManager}
+        currentStaffId={profile.staffId}
       /></Suspense>}
 
       {isSettingsOpen && <Suspense fallback={null}><SettingsModal

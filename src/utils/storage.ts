@@ -323,6 +323,26 @@ export const storage = {
     localStorage.setItem(TIME_RECORDS_KEY, JSON.stringify(records));
   },
 
+  getLocalPayrollData(): { staff: StaffMember[]; records: TimeRecord[] } | null {
+    const storedStaff = localStorage.getItem(STAFF_KEY);
+    const storedRecords = localStorage.getItem(TIME_RECORDS_KEY);
+    if (!storedStaff && !storedRecords) return null;
+
+    return {
+      staff: storedStaff ? JSON.parse(storedStaff) as StaffMember[] : DEFAULT_STAFF,
+      records: storedRecords ? JSON.parse(storedRecords) as TimeRecord[] : [],
+    };
+  },
+
+  hasLocalPayrollData(): boolean {
+    return Boolean(localStorage.getItem(STAFF_KEY) || localStorage.getItem(TIME_RECORDS_KEY));
+  },
+
+  clearLocalPayrollData() {
+    localStorage.removeItem(STAFF_KEY);
+    localStorage.removeItem(TIME_RECORDS_KEY);
+  },
+
   resetAllData() {
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(STAFF_KEY);

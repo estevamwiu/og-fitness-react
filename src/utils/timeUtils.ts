@@ -1,4 +1,4 @@
-import { TimeRecord, DailyStaffSummary, StaffMember, MonthlyPayrollSummary, DayPayrollDetail } from '../types';
+import { TimeRecord, DailyStaffSummary, StaffMember, MonthlyPayrollSummary, DayPayrollDetail, Holiday } from '../types';
 
 // Generate 30-minute slot list between opening and closing (e.g., "06:00" to "22:00")
 export function generateTimeSlots(openingTime: string = '06:00', closingTime: string = '22:00'): string[] {
@@ -131,7 +131,7 @@ export function computeDailyStaffSummary(staff: StaffMember, records: TimeRecord
     }
   });
 
-  if (activeEntryTime) {
+  if (activeEntryTime && date === formatDateKey()) {
     const now = new Date();
     const nowTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     totalWorkedMinutes += calculateMinutesBetween(activeEntryTime, nowTime);
@@ -176,7 +176,7 @@ export const BRAZILIAN_HOLIDAYS_FIXED: Record<string, string> = {
 };
 
 // Verifica se uma data específica é Domingo ou Feriado Nacional (para cálculo 2x dobrado)
-export function isSundayOrHoliday(dateString: string): { 
+export function isSundayOrHoliday(dateString: string, customHolidays: Holiday[] = []): {
   isDoubleRate: boolean; 
   isSunday: boolean; 
   isHoliday: boolean; 
@@ -190,7 +190,8 @@ export function isSundayOrHoliday(dateString: string): {
   const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 6 = Sábado
   const mmDd = `${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
 
-  const holidayName = BRAZILIAN_HOLIDAYS_FIXED[mmDd];
+  const holidayName = customHolidays.find((holiday) => holiday.date === dateString)?.name
+    || BRAZILIAN_HOLIDAYS_FIXED[mmDd];
   if (holidayName) {
     return {
       isDoubleRate: true,
@@ -249,9 +250,10 @@ export function formatDecimalHours(hours: number): string {
 export function calculateMonthlyStaffPayroll(
   staff: StaffMember,
   records: TimeRecord[],
-  yearMonth: string // "YYYY-MM"
+  yearMonth: string, // "YYYY-MM"
+  customHolidays: Holiday[] = [],
 ): MonthlyPayrollSummary {
-  const baseRate = typeof staff.hourlyRate === 'number' && staff.hourlyRate > 0 ? staff.hourlyRate : 45;
+  const baseRate = typeof staff.hourlyRate === 'number' && staff.hourlyRate > 0 ? staff.hourlyRate : 0;
 
   // Filtrar registros deste colaborador e deste mês
   const monthRecords = records.filter(
@@ -267,7 +269,7 @@ export function calculateMonthlyStaffPayroll(
   const daysBreakdown: DayPayrollDetail[] = uniqueDates.map((date) => {
     const dailySummary = computeDailyStaffSummary(staff, records, date);
     const workedMin = dailySummary.totalWorkedMinutes;
-    const specialCheck = isSundayOrHoliday(date);
+    const specialCheck = isSundayOrHoliday(date, customHolidays);
     
     const [y, m, d] = date.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
@@ -277,7 +279,7 @@ export function calculateMonthlyStaffPayroll(
     const multiplier = specialCheck.isDoubleRate ? 2 : 1;
     const effectiveHourlyRate = baseRate * multiplier;
     const workedHours = Math.round((workedMin / 60) * 100) / 100;
-    const dailyTotal = Math.round((workedHours * effectiveHourlyRate) * 100) / 100;
+    const dailyTotal = Math.round((workedMin * effectiveHourlyRate / 60) * 100) / 100;
 
     if (specialCheck.isDoubleRate) {
       sundayHolidayMinutes += workedMin;
@@ -308,8 +310,8 @@ export function calculateMonthlyStaffPayroll(
   const totalWorkedMinutes = regularMinutes + sundayHolidayMinutes;
   const totalWorkedHours = Math.round((totalWorkedMinutes / 60) * 100) / 100;
 
-  const regularEarnings = Math.round((regularHours * baseRate) * 100) / 100;
-  const sundayHolidayEarnings = Math.round((sundayHolidayHours * (baseRate * 2)) * 100) / 100;
+  const regularEarnings = Math.round((regularMinutes * baseRate / 60) * 100) / 100;
+  const sundayHolidayEarnings = Math.round((sundayHolidayMinutes * (baseRate * 2) / 60) * 100) / 100;
   const totalGrossSalary = Math.round((regularEarnings + sundayHolidayEarnings) * 100) / 100;
 
   return {

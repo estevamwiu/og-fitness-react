@@ -1,4 +1,4 @@
-import { OccupancyCount, TimeRecord, GymSettings, StaffMember } from '../types';
+import { OccupancyCount, TimeRecord, GymSettings, StaffMember, Holiday } from '../types';
 import { 
   formatDateBR, 
   generateTimeSlots, 
@@ -190,7 +190,8 @@ export function exportMonthlyPayrollCSV(
   staffList: StaffMember[],
   records: TimeRecord[],
   settings: GymSettings,
-  monthKey: string // YYYY-MM
+  monthKey: string, // YYYY-MM
+  holidays: Holiday[] = [],
 ) {
   const [year, month] = monthKey.split('-').map(Number);
   const monthName = new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -199,7 +200,7 @@ export function exportMonthlyPayrollCSV(
   lines.push(`"${settings.condoName} - ${settings.gymName}"`);
   lines.push(`"RELATÓRIO MENSAL DE FECHAMENTO DE HORAS & FOLHA DE PAGAMENTO"`);
   lines.push(`"Mês de Referência: ${monthName.toUpperCase()} (${monthKey})"`);
-  lines.push(`"Regra de Cálculo: Horas normais (1x) | Domingos e Feriados Nacionais (2x Dobrado)"`);
+  lines.push(`"Regra de Cálculo: Horas normais (1x) | Domingos e Feriados (2x Dobrado)"`);
   lines.push(`"Gerado em: ${new Date().toLocaleString('pt-BR')}"`);
   lines.push('');
 
@@ -211,19 +212,19 @@ export function exportMonthlyPayrollCSV(
   let totalGeralFolha = 0;
 
   staffList.forEach((staff) => {
-    const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey);
+    const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey, holidays);
     totalGeralHoras += payroll.totalWorkedHours;
     totalGeralFolha += payroll.totalGrossSalary;
 
     const row = [
       staff.name,
       staff.role,
-      `R$ ${staff.hourlyRate.toFixed(2).replace('.', ',')}`,
+      `R$ ${payroll.baseHourlyRate.toFixed(2).replace('.', ',')}`,
       payroll.daysWorkedCount,
       payroll.regularHours.toFixed(2).replace('.', ','),
       `R$ ${payroll.regularEarnings.toFixed(2).replace('.', ',')}`,
       payroll.sundayHolidayHours.toFixed(2).replace('.', ','),
-      `R$ ${(staff.hourlyRate * 2).toFixed(2).replace('.', ',')}`,
+      `R$ ${(payroll.baseHourlyRate * 2).toFixed(2).replace('.', ',')}`,
       `R$ ${payroll.sundayHolidayEarnings.toFixed(2).replace('.', ',')}`,
       payroll.totalWorkedHours.toFixed(2).replace('.', ','),
       `R$ ${payroll.totalGrossSalary.toFixed(2).replace('.', ',')}`,
@@ -240,7 +241,7 @@ export function exportMonthlyPayrollCSV(
   lines.push('"Colaborador";"Data";"Dia da Semana";"Classificação do Dia";"Entrada";"Saída";"Horas Trabalhadas";"Multiplicador";"Valor/Hora Aplicado";"Total do Dia (R$)"');
 
   staffList.forEach((staff) => {
-    const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey);
+    const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey, holidays);
     payroll.daysBreakdown.forEach((day) => {
       const row = [
         staff.name,
