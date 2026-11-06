@@ -26,6 +26,7 @@ interface TimeClockViewProps {
   onDeleteHoliday: (date: string) => Promise<void>;
   onImportLocalData: () => Promise<void>;
   onCompleteMigration: () => Promise<void>;
+  onUpdateStaffHourlyRate?: (staffId: string, newRate: number) => Promise<void>;
 }
 
 export const TimeClockView: React.FC<TimeClockViewProps> = ({
@@ -43,6 +44,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
   onDeleteHoliday,
   onImportLocalData,
   onCompleteMigration,
+  onUpdateStaffHourlyRate,
 }) => {
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>(formatDateKey().slice(0, 7));
@@ -132,7 +134,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
       <div>
         <div className="text-[10px] font-semibold text-[#777] uppercase tracking-widest mb-3 flex items-center gap-1.5">
           <UserCheck className="w-4 h-4 text-[#E2E8F0]" />
-          <span>Status dos Instrutores Hoje ({formatDateBR(todayKey)})</span>
+          <span>Status dos Professores Hoje ({formatDateBR(todayKey)})</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -223,6 +225,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
           onDeleteHoliday={onDeleteHoliday}
           onImportLocalData={onImportLocalData}
           onCompleteMigration={onCompleteMigration}
+          onUpdateStaffHourlyRate={onUpdateStaffHourlyRate}
         />
       )}
 

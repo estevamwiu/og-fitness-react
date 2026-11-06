@@ -38,7 +38,9 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
 
   // Form states
   const [name, setName] = useState('');
-  const [role, setRole] = useState<StaffMember['role']>('Instrutor');
+  const [username, setUsername] = useState('');
+  const [pin, setPin] = useState('');
+  const [role, setRole] = useState<StaffMember['role']>('Professor');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [scheduledShift, setScheduledShift] = useState('06:00 - 14:00');
@@ -51,7 +53,9 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     setSaveError(null);
     setEditingStaff(null);
     setName('');
-    setRole('Instrutor');
+    setUsername('');
+    setPin('');
+    setRole('Professor');
     setEmail('');
     setPhone('');
     setScheduledShift('06:00 - 14:00');
@@ -64,6 +68,8 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     setSaveError(null);
     setEditingStaff(staff);
     setName(staff.name);
+    setUsername(staff.username || '');
+    setPin(staff.pin || '');
     setRole(staff.role);
     setEmail(staff.email || '');
     setPhone(staff.phone || '');
@@ -94,8 +100,16 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
-    if (!name.trim() || !email.trim()) {
-      setSaveError('Informe nome e e-mail para cadastrar o acesso do colaborador.');
+    if (!name.trim()) {
+      setSaveError('Informe o nome completo do colaborador.');
+      return;
+    }
+
+    const cleanUsername = username.trim().toLowerCase() || name.trim().toLowerCase().replace(/\s+/g, '.');
+    const cleanPin = pin.trim().replace(/\D/g, '');
+
+    if (cleanPin.length !== 6) {
+      setSaveError('O PIN de acesso deve conter exatamente 6 números (ex: 123456).');
       return;
     }
 
@@ -105,6 +119,8 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
       return;
     }
 
+    const derivedEmail = email.trim() || `${cleanUsername}@ogfitness.local`;
+
     try {
       if (editingStaff) {
         const updated = staffList.map((s) =>
@@ -112,8 +128,10 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
             ? {
                 ...s,
                 name: name.trim(),
+                username: cleanUsername,
+                pin: cleanPin,
                 role,
-                email: email.trim(),
+                email: derivedEmail,
                 phone: phone.trim() || undefined,
                 scheduledShift: scheduledShift.trim(),
                 hourlyRate: rateNum,
@@ -126,8 +144,10 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
         const newStaff: StaffMember = {
           id: `st-${Date.now()}`,
           name: name.trim(),
+          username: cleanUsername,
+          pin: cleanPin,
           role,
-          email: email.trim(),
+          email: derivedEmail,
           phone: phone.trim() || undefined,
           scheduledShift: scheduledShift.trim(),
           hourlyRate: rateNum,
@@ -164,9 +184,9 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Equipe & Escala de Instrutores</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Equipe & Escala de Professores</h2>
               <p className="text-xs text-[#777]">
-                Cadastro de colaboradores autorizados a registrar ponto eletrônico e contagem de 30min na academia.
+                Cadastro de professores autorizados a registrar ponto eletrônico e contagem de 30min na academia.
               </p>
             </div>
           </div>
@@ -249,6 +269,17 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                           Dom/Feriado: 2x ({formatCurrencyBRL(staff.hourlyRate * 2)}/h)
                         </span>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[#ccc]">
+                    <span className="text-[#777] flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#00F201]" />
+                      Login / PIN (6 dígitos):
+                    </span>
+                    <div className="font-mono text-right">
+                      <span className="text-white font-semibold">@{staff.username || 'usuario'}</span>
+                      <span className="text-[#777] ml-2">PIN: {staff.pin || '••••••'}</span>
                     </div>
                   </div>
 
@@ -352,20 +383,53 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                 />
               </div>
 
+              {/* Login do Professor (Usuário e PIN de 6 dígitos) */}
+              <div className="p-3 bg-[#0d0d0d] rounded-xl border border-[#2a2a2a] space-y-2.5">
+                <div className="flex items-center justify-between text-white font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[#00F201]" />
+                    Acesso do Professor (Ponto)
+                  </span>
+                  <span className="text-[10px] text-[#00F201]">Usuário + PIN de 6 números</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[#777] font-semibold mb-1">Nome de Usuário</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ex: carlos"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                      className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-[#00F201] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[#777] font-semibold mb-1">PIN (6 números)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      required
+                      placeholder="123456"
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono tracking-widest text-xs focus:border-[#00F201] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[#777] font-semibold mb-1">Cargo</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as StaffMember['role'])}
-                    className="w-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-lg px-2.5 py-2 text-white text-xs focus:border-[#00F201] focus:outline-none cursor-pointer"
-                  >
-                    <option value="Instrutor" className="bg-[#141414] text-white">Instrutor</option>
-                    <option value="Personal Trainer" className="bg-[#141414] text-white">Personal Trainer</option>
-                    <option value="Estagiário" className="bg-[#141414] text-white">Estagiário</option>
-                    <option value="Coordenador" className="bg-[#141414] text-white">Coordenador</option>
-                    <option value="Recepcionista" className="bg-[#141414] text-white">Recepcionista</option>
-                  </select>
+                  <label className="block text-[#777] font-semibold mb-1">Função / Cargo</label>
+                  <input
+                    type="text"
+                    value="Professor"
+                    disabled
+                    className="w-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-lg px-2.5 py-2 text-white font-semibold text-xs opacity-90 cursor-not-allowed"
+                  />
                 </div>
 
               </div>

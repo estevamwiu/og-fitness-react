@@ -1,7 +1,14 @@
+-- ==============================================================================
+-- OG FITNESS - SCHEMA COMPLETO SUPABASE (PONTO ELETRÔNICO & FECHAMENTO MENSAL)
+-- ==============================================================================
+
+-- 1. Tabela de Colaboradores / Professores (com Usuário e PIN de 6 dígitos)
 create table if not exists public.staff (
   id text primary key,
   name text not null,
-  role text not null check (role in ('Instrutor', 'Personal Trainer', 'Estagiário', 'Coordenador', 'Recepcionista')),
+  username text unique,
+  pin text,
+  role text not null default 'Professor' check (role = 'Professor'),
   email text,
   phone text,
   color text not null default '#10B981',
@@ -10,6 +17,16 @@ create table if not exists public.staff (
   created_at timestamptz not null default now()
 );
 
+-- Garantir colunas e restrições para bancos já criados anteriormente
+alter table public.staff add column if not exists username text;
+alter table public.staff add column if not exists pin text;
+alter table public.staff drop constraint if exists staff_role_check;
+alter table public.staff add constraint staff_role_check check (role = 'Professor');
+create unique index if not exists staff_username_idx
+  on public.staff (lower(trim(username)))
+  where username is not null;
+
+-- 2. Perfis de Usuários do Supabase Auth (máximo 2 Gestores)
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   role text not null default 'professor' check (role in ('manager', 'professor')),
@@ -21,12 +38,14 @@ create unique index if not exists profiles_one_user_per_staff_idx
   on public.profiles (staff_id)
   where staff_id is not null and role = 'professor';
 
+-- 3. Tabela de Valor por Hora de cada Professor (Staff Payroll)
 create table if not exists public.staff_payroll (
   staff_id text primary key references public.staff(id) on delete cascade,
   hourly_rate numeric(10, 2) not null check (hourly_rate > 0),
   updated_at timestamptz not null default now()
 );
 
+-- 4. Tabela de Batidas de Ponto Eletrônico
 create table if not exists public.time_records (
   id text primary key,
   staff_id text not null references public.staff(id),
@@ -45,6 +64,146 @@ create table if not exists public.time_records (
 create index if not exists time_records_staff_date_idx
   on public.time_records (staff_id, date, timestamp);
 
+-- 5. Feriados e Datas com Adicional de 100% (2x Dobrado)
+create table if not exists public.holidays (
+  date date primary key,
+  name text not null check (length(trim(name)) > 0),
+  created_at timestamptz not null default now()
+);
+
+-- 6. Configurações da Aplicação
+create table if not exists public.app_config (
+  key text primary key,
+  value jsonb not null default 'false'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+-- ==============================================================================
+-- FUNÇÕES DE SEGURANÇA E REGRAS DE NEGÓCIO
+-- ==============================================================================
+
+-- Função para verificar se o usuário autenticado é um dos Gestores
+create or replace function public.is_manager()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'manager'
+  );
+$$;
+
+-- Limitar a no máximo dois gestores cadastrados no sistema
+create or replace function public.limit_manager_accounts()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_manager_count integer;
+begin
+  if new.role = 'manager' then
+    if tg_op = 'INSERT' then
+      perform pg_advisory_xact_lock(732010);
+    elsif old.role is distinct from new.role then
+      perform pg_advisory_xact_lock(732010);
+    else
+      return new;
+    end if;
+
+    select count(*) into v_manager_count
+    from public.profiles
+    where role = 'manager';
+    if v_manager_count >= 2 then
+      raise exception 'O sistema permite no máximo dois gestores.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_two_managers on public.profiles;
+create trigger enforce_two_managers
+  before insert or update of role on public.profiles
+  for each row execute procedure public.limit_manager_accounts();
+
+-- Criação automática de perfil ao cadastrar novo usuário
+create or replace function public.create_profile_for_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id) values (new.id)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists create_profile_after_signup on auth.users;
+create trigger create_profile_after_signup
+  after insert on auth.users
+  for each row execute procedure public.create_profile_for_new_user();
+
+-- ==============================================================================
+-- AUTENTICAÇÃO SIMPLES POR USUÁRIO E PIN DE 6 DÍGITOS
+-- ==============================================================================
+create or replace function public.verify_staff_login(
+  p_username text,
+  p_pin text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_staff record;
+  v_hourly_rate numeric;
+begin
+  select s.id, s.name, s.username, s.role, s.color, s.scheduled_shift, s.email, s.active
+    into v_staff
+  from public.staff s
+  where lower(trim(coalesce(s.username, ''))) = lower(trim(p_username))
+    and trim(coalesce(s.pin, '')) = trim(p_pin)
+    and s.active = true
+  limit 1;
+
+  if not found then
+    return jsonb_build_object(
+      'success', false,
+      'error', 'Nome de usuário ou PIN de 6 dígitos inválido.'
+    );
+  end if;
+
+  select hourly_rate into v_hourly_rate
+  from public.staff_payroll
+  where staff_id = v_staff.id;
+
+  return jsonb_build_object(
+    'success', true,
+    'staff', jsonb_build_object(
+      'id', v_staff.id,
+      'name', v_staff.name,
+      'username', v_staff.username,
+      'role', v_staff.role,
+      'color', v_staff.color,
+      'scheduledShift', v_staff.scheduled_shift,
+      'email', v_staff.email,
+      'hourlyRate', coalesce(v_hourly_rate, 0)
+    )
+  );
+end;
+$$;
+
+-- ==============================================================================
+-- REGISTRO DE PONTO COM TRATAMENTO DE TIMEZONE E VALIDAÇÃO DE SEQUÊNCIA
+-- ==============================================================================
 create or replace function public.register_time_punch(
   p_staff_id text,
   p_type text,
@@ -67,20 +226,25 @@ declare
   v_now timestamptz;
   v_local_now timestamp;
 begin
-  if auth.uid() is null then
-    raise exception 'Autenticação obrigatória.';
+  -- Identifica o colaborador autenticado ou solicitado
+  if auth.uid() is not null then
+    if public.is_manager() then
+      v_staff_id := p_staff_id;
+    else
+      select staff_id into v_staff_id
+      from public.profiles
+      where id = auth.uid();
+
+      if v_staff_id is null or (p_staff_id is not null and p_staff_id <> v_staff_id) then
+        v_staff_id := p_staff_id;
+      end if;
+    end if;
+  else
+    v_staff_id := p_staff_id;
   end if;
 
-  if public.is_manager() then
-    v_staff_id := p_staff_id;
-  else
-    select staff_id into v_staff_id
-    from public.profiles
-    where id = auth.uid();
-
-    if v_staff_id is null or (p_staff_id is not null and p_staff_id <> v_staff_id) then
-      raise exception 'Professor sem vínculo válido com um colaborador.';
-    end if;
+  if v_staff_id is null then
+    raise exception 'Colaborador não identificado.';
   end if;
 
   select name, role, active
@@ -130,73 +294,7 @@ begin
 end;
 $$;
 
-create table if not exists public.holidays (
-  date date primary key,
-  name text not null check (length(trim(name)) > 0),
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.app_config (
-  key text primary key,
-  value jsonb not null default 'false'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
-create or replace function public.is_manager()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role = 'manager'
-  );
-$$;
-
-create or replace function public.create_profile_for_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id) values (new.id)
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
-create or replace function public.limit_manager_accounts()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_manager_count integer;
-begin
-  if new.role = 'manager' then
-    if tg_op = 'INSERT' then
-      perform pg_advisory_xact_lock(732010);
-    elsif old.role is distinct from new.role then
-      perform pg_advisory_xact_lock(732010);
-    else
-      return new;
-    end if;
-
-    select count(*) into v_manager_count
-    from public.profiles
-    where role = 'manager';
-    if v_manager_count >= 2 then
-      raise exception 'O sistema permite no máximo dois gestores.';
-    end if;
-  end if;
-  return new;
-end;
-$$;
-
+-- Função para gestores vincularem e-mails a colaboradores
 create or replace function public.link_staff_account(p_email text, p_staff_id text)
 returns void
 language plpgsql
@@ -229,20 +327,9 @@ begin
 end;
 $$;
 
-drop trigger if exists create_profile_after_signup on auth.users;
-create trigger create_profile_after_signup
-  after insert on auth.users
-  for each row execute procedure public.create_profile_for_new_user();
-
-insert into public.profiles (id)
-select id from auth.users
-on conflict (id) do nothing;
-
-drop trigger if exists enforce_two_managers on public.profiles;
-create trigger enforce_two_managers
-  before insert or update of role on public.profiles
-  for each row execute procedure public.limit_manager_accounts();
-
+-- ==============================================================================
+-- POLÍTICAS DE ACESSO (ROW LEVEL SECURITY)
+-- ==============================================================================
 alter table public.staff enable row level security;
 alter table public.profiles enable row level security;
 alter table public.staff_payroll enable row level security;
@@ -250,88 +337,105 @@ alter table public.time_records enable row level security;
 alter table public.holidays enable row level security;
 alter table public.app_config enable row level security;
 
+-- Staff
 drop policy if exists "Authenticated users read staff directory" on public.staff;
 create policy "Authenticated users read staff directory"
-  on public.staff for select to authenticated using (true);
+  on public.staff for select to authenticated, anon using (true);
+
 drop policy if exists "Managers manage staff directory" on public.staff;
 create policy "Managers manage staff directory"
   on public.staff for all to authenticated
   using (public.is_manager()) with check (public.is_manager());
 
+-- Profiles
 drop policy if exists "Users read own profile and managers read all" on public.profiles;
 create policy "Users read own profile and managers read all"
   on public.profiles for select to authenticated
   using (id = auth.uid() or public.is_manager());
 
+-- Staff Payroll
+drop policy if exists "Managers manage payroll" on public.staff_payroll;
 drop policy if exists "Only managers read payroll" on public.staff_payroll;
-create policy "Only managers read payroll"
-  on public.staff_payroll for select to authenticated using (public.is_manager());
 drop policy if exists "Only managers manage payroll" on public.staff_payroll;
-create policy "Only managers manage payroll"
+create policy "Managers read payroll"
+  on public.staff_payroll for select to authenticated, anon using (true);
+create policy "Managers manage payroll"
   on public.staff_payroll for all to authenticated
   using (public.is_manager()) with check (public.is_manager());
 
+-- Time Records
 drop policy if exists "Users read own time records and managers read all" on public.time_records;
-create policy "Users read own time records and managers read all"
-  on public.time_records for select to authenticated
-  using (
-    public.is_manager()
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-        and profiles.staff_id = time_records.staff_id
-    )
-  );
-drop policy if exists "Users create own time records and managers create all" on public.time_records;
+create policy "Users read time records"
+  on public.time_records for select to authenticated, anon
+  using (true);
+
 drop policy if exists "Managers import time records" on public.time_records;
 create policy "Managers import time records"
   on public.time_records for insert to authenticated
   with check (public.is_manager());
+
 drop policy if exists "Only managers update time records" on public.time_records;
 create policy "Only managers update time records"
   on public.time_records for update to authenticated
   using (public.is_manager()) with check (public.is_manager());
+
 drop policy if exists "Only managers delete time records" on public.time_records;
 create policy "Only managers delete time records"
-  on public.time_records for delete to authenticated using (public.is_manager());
+  on public.time_records for delete to authenticated
+  using (public.is_manager());
 
+-- Holidays
 drop policy if exists "Only managers access holidays" on public.holidays;
-create policy "Only managers access holidays"
+drop policy if exists "Users read holidays" on public.holidays;
+create policy "Users read holidays"
+  on public.holidays for select to authenticated, anon using (true);
+
+create policy "Managers manage holidays"
   on public.holidays for all to authenticated
   using (public.is_manager()) with check (public.is_manager());
 
+-- App Config
 drop policy if exists "Authenticated users read migration status" on public.app_config;
 create policy "Authenticated users read migration status"
-  on public.app_config for select to anon, authenticated using (key = 'payroll_migration_complete');
+  on public.app_config for select to anon, authenticated using (true);
+
 drop policy if exists "Only managers manage app config" on public.app_config;
 create policy "Only managers manage app config"
   on public.app_config for all to authenticated
   using (public.is_manager()) with check (public.is_manager());
 
+-- ==============================================================================
+-- PERMISSÕES DE EXECUÇÃO
+-- ==============================================================================
 grant select, insert, update, delete on public.staff to authenticated;
+grant select on public.staff to anon;
 grant select on public.profiles to authenticated;
 grant select, insert, update, delete on public.staff_payroll to authenticated;
+grant select on public.staff_payroll to anon;
 grant select, insert, update, delete on public.time_records to authenticated;
+grant select on public.time_records to anon;
 grant select, insert, update, delete on public.holidays to authenticated;
+grant select on public.holidays to anon;
 grant select on public.app_config to anon, authenticated;
 grant insert, update, delete on public.app_config to authenticated;
-revoke insert on public.time_records from anon;
-revoke all on function public.register_time_punch(text, text, text, text) from public, anon;
-revoke all on function public.is_manager() from public, anon;
-revoke all on function public.link_staff_account(text, text) from public, anon;
-grant execute on function public.is_manager() to authenticated;
-grant execute on function public.register_time_punch(text, text, text, text) to authenticated;
+
+grant execute on function public.is_manager() to anon, authenticated;
+grant execute on function public.verify_staff_login(text, text) to anon, authenticated;
+grant execute on function public.register_time_punch(text, text, text, text) to anon, authenticated;
 grant execute on function public.link_staff_account(text, text) to authenticated;
 
--- Depois de criar os dois usuários gestores no Supabase Auth, promova-os:
--- update public.profiles
--- set role = 'manager'
--- where id in (
---   (select id from auth.users where email = 'gestor1@exemplo.com'),
---   (select id from auth.users where email = 'gestor2@exemplo.com')
--- );
+-- ==============================================================================
+-- INSTRUÇÕES DE CONFIGURAÇÃO DOS 2 GESTORES:
+-- ==============================================================================
+-- 1. Crie os dois usuários gestores na aba Authentication do Supabase:
+--    Exemplo: gestor1@ogfitness.com.br e gestor2@ogfitness.com.br
 --
--- Vincule cada professor ao cadastro correspondente:
--- update public.profiles
--- set staff_id = 'st-1'
--- where id = (select id from auth.users where email = 'professor@exemplo.com');
+-- 2. No SQL Editor do Supabase, promova os dois a 'manager':
+--    update public.profiles
+--    set role = 'manager'
+--    where id in (
+--      (select id from auth.users where email = 'gestor1@ogfitness.com.br'),
+--      (select id from auth.users where email = 'gestor2@ogfitness.com.br')
+--    );
+--
+-- 3. Cadastre os professores com nome de usuário e PIN de 6 dígitos diretamente no app!

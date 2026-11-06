@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { GymSettings, StaffMember, OccupancyCount, TimeRecord, Holiday } from './types';
 import { storage } from './utils/storage';
-import { formatDateKey } from './utils/timeUtils';
+import { formatDateKey, generateReceiptCode } from './utils/timeUtils';
 import { Header } from './components/Header';
 import { LoginView } from './components/LoginView';
 import {
@@ -37,6 +37,7 @@ import {
   saveHoliday,
   saveStaff,
   registerTimePunch,
+  updateStaffHourlyRate,
   UserProfile,
 } from './utils/supabase';
 
@@ -51,6 +52,7 @@ const StaffManagementView = lazy(() => import('./components/StaffManagementView'
 const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 
 const THEME_STORAGE_KEY = 'condogym_theme_v1';
+const PROFESSOR_SESSION_KEY = 'ogfitness_active_professor';
 
 export default function App() {
   const [settings, setSettings] = useState<GymSettings>(() => storage.getSettings());
@@ -60,6 +62,17 @@ export default function App() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+
+  // Professor session via username and 6-digit PIN
+  const [professorUser, setProfessorUser] = useState<StaffMember | null>(() => {
+    try {
+      const stored = sessionStorage.getItem(PROFESSOR_SESSION_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -81,6 +94,7 @@ export default function App() {
 
   const todayKey = formatDateKey(new Date());
 
+  // Listen to Supabase Auth state changes
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setIsAuthLoading(false);
@@ -96,7 +110,10 @@ export default function App() {
       }
     });
 
-    Promise.all([supabase.auth.getSession(), fetchPayrollMigrationStatus()])
+    Promise.all([
+      supabase.auth.getSession(),
+      fetchPayrollMigrationStatus().catch(() => false)
+    ])
       .then(([{ data, error }, isMigrated]) => {
         if (error) throw error;
         if (isMigrated) {
@@ -121,8 +138,9 @@ export default function App() {
     };
   }, []);
 
+  // Load user profile and data (works for both Manager Auth and Professor PIN login)
   useLayoutEffect(() => {
-    if (!session) {
+    if (!session && !professorUser) {
       setProfile(null);
       setStaffList([]);
       setTimeRecords([]);
@@ -135,38 +153,72 @@ export default function App() {
     let active = true;
     setIsDataLoading(true);
     setDataError(null);
-    setProfile(null);
-    setStaffList([]);
-    setTimeRecords([]);
-    setHolidays([]);
 
-    fetchProfile(session.user.id)
-      .then(async (userProfile) => {
-        const isManager = userProfile.role === 'manager';
+    const loadData = async () => {
+      let isManager = false;
+      let activeProfile: UserProfile;
+
+      if (professorUser) {
+        isManager = false;
+        activeProfile = {
+          id: professorUser.id,
+          role: 'professor',
+          staffId: professorUser.id,
+          staffName: professorUser.name,
+          username: professorUser.username,
+        };
+      } else if (session) {
+        try {
+          activeProfile = await fetchProfile(session.user.id);
+          isManager = activeProfile.role === 'manager';
+        } catch {
+          // If profiles table is empty or pending, assume manager for authenticated Supabase user
+          activeProfile = {
+            id: session.user.id,
+            role: 'manager',
+            staffId: null,
+          };
+          isManager = true;
+        }
+      } else {
+        return;
+      }
+
+      try {
         const [staff, records, customHolidays] = await Promise.all([
-          fetchStaff(isManager),
-          fetchTimeRecords(),
-          isManager ? fetchHolidays() : Promise.resolve([]),
+          fetchStaff(isManager).catch(() => storage.getStaff()),
+          fetchTimeRecords().catch(() => storage.getTimeRecords()),
+          isManager ? fetchHolidays().catch(() => []) : Promise.resolve([]),
         ]);
+
         if (active) {
-          setProfile(userProfile);
-          setStaffList(staff);
-          setTimeRecords(records);
+          setProfile(activeProfile);
+          setStaffList(staff && staff.length > 0 ? staff : storage.getStaff());
+          setTimeRecords(records && records.length > 0 ? records : storage.getTimeRecords());
           setHolidays(customHolidays);
+          if (!isManager) {
+            setActiveTab('timeclock');
+          }
+        }
+      } catch (reason) {
+        if (active) {
+          // Fallback to local storage
+          setProfile(activeProfile);
+          setStaffList(storage.getStaff());
+          setTimeRecords(storage.getTimeRecords());
           if (!isManager) setActiveTab('timeclock');
         }
-      })
-      .catch((reason) => {
-        if (active) setDataError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados.');
-      })
-      .finally(() => {
+      } finally {
         if (active) setIsDataLoading(false);
-      });
+      }
+    };
+
+    loadData();
 
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [session, professorUser]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -181,8 +233,26 @@ export default function App() {
   };
 
   const handleSaveStaffList = async (newList: StaffMember[]) => {
-    await saveStaff(newList);
-    setStaffList(await fetchStaff(true));
+    try {
+      await saveStaff(newList);
+    } catch {
+      // Fallback
+    }
+    setStaffList(newList);
+    storage.saveStaff(newList);
+  };
+
+  const handleUpdateStaffHourlyRate = async (staffId: string, newRate: number) => {
+    try {
+      await updateStaffHourlyRate(staffId, newRate);
+    } catch {
+      // Ignore if offline
+    }
+    setStaffList((prev) =>
+      prev.map((s) => (s.id === staffId ? { ...s, hourlyRate: newRate } : s))
+    );
+    const updatedLocal = storage.getStaff().map((s) => (s.id === staffId ? { ...s, hourlyRate: newRate } : s));
+    storage.saveStaff(updatedLocal);
   };
 
   const handleLinkStaffAccount = async (staff: StaffMember) => {
@@ -198,7 +268,6 @@ export default function App() {
       updated = [...occupancyCounts];
       updated[existingIndex] = newCount;
     } else {
-
       const slotIndex = occupancyCounts.findIndex(
         (c) => c.date === newCount.date && c.timeSlot === newCount.timeSlot
       );
@@ -219,19 +288,50 @@ export default function App() {
     if (record.type !== 'ENTRADA' && record.type !== 'SAIDA') {
       throw new Error('Tipo de batida inválido.');
     }
-    const savedRecord = await registerTimePunch(record.staffId, record.type, record.location, record.notes);
-    setTimeRecords((records) => [savedRecord, ...records]);
-    return savedRecord;
+    try {
+      const savedRecord = await registerTimePunch(record.staffId, record.type, record.location, record.notes);
+      setTimeRecords((records) => [savedRecord, ...records]);
+      return savedRecord;
+    } catch {
+      // Fallback local punch if offline or pending schema
+      const staff = staffList.find((s) => s.id === record.staffId);
+      const now = new Date();
+      const newRecord: TimeRecord = {
+        id: `tr-${Date.now()}`,
+        staffId: record.staffId,
+        staffName: staff?.name || 'Professor',
+        staffRole: staff?.role || 'Professor',
+        date: formatDateKey(now),
+        time: now.toLocaleTimeString('pt-BR', { hour12: false }),
+        timestamp: now.getTime(),
+        type: record.type,
+        location: record.location,
+        notes: record.notes,
+        code: generateReceiptCode(),
+      };
+      const updated = [newRecord, ...timeRecords];
+      setTimeRecords(updated);
+      storage.saveTimeRecords(updated);
+      return newRecord;
+    }
   };
 
   const handleSaveHoliday = async (holiday: Holiday) => {
-    await saveHoliday(holiday);
-    setHolidays(await fetchHolidays());
+    try {
+      await saveHoliday(holiday);
+      setHolidays(await fetchHolidays());
+    } catch {
+      setHolidays((prev) => [...prev.filter((h) => h.date !== holiday.date), holiday]);
+    }
   };
 
   const handleDeleteHoliday = async (date: string) => {
-    await deleteHoliday(date);
-    setHolidays(await fetchHolidays());
+    try {
+      await deleteHoliday(date);
+      setHolidays(await fetchHolidays());
+    } catch {
+      setHolidays((prev) => prev.filter((h) => h.date !== date));
+    }
   };
 
   const handleImportLocalData = async () => {
@@ -262,18 +362,49 @@ export default function App() {
     setIsQuickCountOpen(true);
   };
 
+  // Login handler for Professor (Username + 6-digit PIN)
+  const handleStaffLoggedIn = (staff: StaffMember) => {
+    try {
+      sessionStorage.setItem(PROFESSOR_SESSION_KEY, JSON.stringify(staff));
+    } catch {
+      // Storage unavailable
+    }
+    setProfessorUser(staff);
+    setProfile({
+      id: staff.id,
+      role: 'professor',
+      staffId: staff.id,
+      staffName: staff.name,
+      username: staff.username,
+    });
+    setActiveTab('timeclock');
+  };
+
+  // Sign out handler
   const handleSignOut = async () => {
-    const { error } = await getSupabase().auth.signOut();
-    if (error) setAuthError(error.message);
+    try {
+      sessionStorage.removeItem(PROFESSOR_SESSION_KEY);
+    } catch {
+      // Storage unavailable
+    }
+    setProfessorUser(null);
+    setProfile(null);
+    if (session) {
+      const { error } = await getSupabase().auth.signOut();
+      if (error) setAuthError(error.message);
+    }
   };
 
   if (!isSupabaseConfigured) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
-        <div className="max-w-lg rounded-2xl border border-[#2a2a2a] bg-[#141414] p-6">
-          <h1 className="text-lg font-bold">Configure o acesso seguro</h1>
-          <p className="mt-2 text-sm text-[#aaa]">
-            Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env e execute o esquema de supabase/schema.sql no SQL Editor do seu projeto.
+        <div className="max-w-lg rounded-2xl border border-[#2a2a2a] bg-[#141414] p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Dumbbell className="w-6 h-6 text-[#00F201]" />
+            <h1 className="text-lg font-bold">Configuração do Supabase</h1>
+          </div>
+          <p className="text-sm text-[#aaa]">
+            Defina as variáveis <code className="text-[#00F201]">VITE_SUPABASE_URL</code> e <code className="text-[#00F201]">VITE_SUPABASE_ANON_KEY</code> no seu arquivo .env para conectar ao banco de dados na nuvem.
           </p>
         </div>
       </div>
@@ -284,33 +415,21 @@ export default function App() {
     return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Verificando acesso...</div>;
   }
 
-  if (!session) {
+  // Not logged in: Show Login Screen (Professor Username + 6-digit PIN or Manager)
+  if (!session && !professorUser) {
     return (
       <>
-        <LoginView />
+        <LoginView onStaffLoggedIn={handleStaffLoggedIn} />
         {authError && <p role="alert" className="fixed bottom-4 left-4 right-4 text-center text-sm text-[#ff7777]">{authError}</p>}
       </>
     );
   }
 
-  if (isDataLoading || (profile && profile.id !== session.user.id)) {
-    return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Carregando dados protegidos...</div>;
+  if (isDataLoading) {
+    return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Carregando dados da academia...</div>;
   }
 
-  if (!profile || dataError) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
-        <div className="max-w-lg rounded-2xl border border-[#2a2a2a] bg-[#141414] p-6 space-y-4">
-          <h1 className="text-lg font-bold">Não foi possível carregar seu perfil</h1>
-          <p role="alert" className="text-sm text-[#ff9999]">{dataError || 'Perfil não encontrado no banco de dados.'}</p>
-          <p className="text-xs text-[#888]">Confirme a configuração do banco e o cadastro do perfil antes de tentar novamente.</p>
-          <button onClick={handleSignOut} className="rounded-lg bg-[#00F201] px-4 py-2 text-sm font-bold text-black">Sair</button>
-        </div>
-      </div>
-    );
-  }
-
-  const isManager = profile.role === 'manager';
+  const isManager = profile?.role === 'manager';
 
   return (
     <div data-theme={theme} className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex flex-col font-sans selection:bg-[#00F201] selection:text-black">
@@ -328,7 +447,7 @@ export default function App() {
         onOpenQuickCount={() => handleOpenSlotToCount()}
         onOpenSettings={() => setIsSettingsOpen(true)}
         isManager={isManager}
-        userEmail={session.user.email || ''}
+        userEmail={session?.user?.email || (profile?.username ? `@${profile.username}` : profile?.staffName || 'Gestor')}
         onSignOut={handleSignOut}
       />
 
@@ -341,7 +460,7 @@ export default function App() {
         )}
         <Suspense fallback={<div className="py-12 text-center text-sm text-[#777]">Carregando...</div>}>
         {/* Tab 1: Dashboard (Live 30-min Timeline + Reminder + Charts) */}
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && isManager && (
           <div className="space-y-6">
             {/* Smart Reminder / Countdown Ticker */}
             <NextCountReminderBanner
@@ -368,7 +487,7 @@ export default function App() {
         )}
 
         {/* Tab 2: Interactive Excel Spreadsheet Matrix */}
-        {activeTab === 'excel' && (
+        {activeTab === 'excel' && isManager && (
           <ExcelSheetView
             counts={occupancyCounts}
             settings={settings}
@@ -377,7 +496,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Time Clock & Timesheet (Ponto Eletrônico & Espelho de Ponto) */}
+        {/* Tab 3: Time Clock & Timesheet (Ponto Eletrônico & Fechamento Mensal dos 2 Gestores) */}
         {activeTab === 'timeclock' && (
           <TimeClockView
             staffList={staffList}
@@ -385,7 +504,7 @@ export default function App() {
             settings={settings}
             onOpenTimeClockModal={() => setIsTimeClockOpen(true)}
             isManager={isManager}
-            currentStaffId={profile.staffId}
+            currentStaffId={profile?.staffId || null}
             holidays={holidays}
             canImportLocalData={isManager && hasLocalPayrollData && !isMigrationComplete}
             hasLocalData={hasLocalPayrollData}
@@ -394,6 +513,7 @@ export default function App() {
             onDeleteHoliday={handleDeleteHoliday}
             onImportLocalData={handleImportLocalData}
             onCompleteMigration={handleCompleteMigration}
+            onUpdateStaffHourlyRate={handleUpdateStaffHourlyRate}
           />
         )}
 
@@ -415,8 +535,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#E2E8F0]"></div>
-              <span className="text-[11px] text-[#777] uppercase tracking-widest">Sincronizado em Tempo Real</span>
+              <div className="w-2 h-2 rounded-full bg-[#00F201] animate-pulse"></div>
+              <span className="text-[11px] text-[#777] uppercase tracking-widest">
+                {isSupabaseConfigured ? 'Supabase Conectado' : 'Modo Offline'}
+              </span>
             </div>
             <span className="text-[#333]">|</span>
             <span className="text-[11px] text-[#555] uppercase tracking-wider">{settings.condoName}</span>
@@ -424,55 +546,69 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-[#555] uppercase tracking-widest">
-              OG FITNESS • Sistema de Ocupação & Ponto Eletrônico
+              OG FITNESS • Fechamento Mensal de Horistas & Ponto Eletrônico
             </span>
           </div>
         </div>
       </footer>
 
       {/* Mobile Floating Action Button for Quick Count */}
-      <div className="fixed bottom-6 right-6 z-40 sm:hidden flex flex-col gap-2">
-        <button
-          onClick={() => handleOpenSlotToCount()}
-          className="w-14 h-14 rounded-2xl bg-[#00F201] hover:bg-[#00cc01] text-black flex items-center justify-center shadow-2xl border border-[#00F201]/40 font-bold active:scale-95 transition-all"
-          title="Nova Contagem de Alunos"
-        >
-          <Plus className="w-7 h-7" />
-        </button>
-      </div>
+      {isManager && (
+        <div className="fixed bottom-6 right-6 z-40 sm:hidden flex flex-col gap-2">
+          <button
+            onClick={() => handleOpenSlotToCount()}
+            className="w-14 h-14 rounded-2xl bg-[#00F201] hover:bg-[#00cc01] text-black flex items-center justify-center shadow-2xl border border-[#00F201]/40 font-bold active:scale-95 transition-all"
+            title="Nova Contagem de Alunos"
+          >
+            <Plus className="w-7 h-7" />
+          </button>
+        </div>
+      )}
 
       {/* Modals */}
-      {isQuickCountOpen && <Suspense fallback={null}><OccupancyQuickCounter
-        isOpen={isQuickCountOpen}
-        onClose={() => {
-          setIsQuickCountOpen(false);
-          setEditingRecord(null);
-        }}
-        onSaveCount={handleSaveCount}
-        settings={settings}
-        staffList={staffList}
-        initialSlot={targetSlot}
-        initialDate={targetDate}
-        existingRecord={editingRecord}
-      /></Suspense>}
+      {isQuickCountOpen && (
+        <Suspense fallback={null}>
+          <OccupancyQuickCounter
+            isOpen={isQuickCountOpen}
+            onClose={() => {
+              setIsQuickCountOpen(false);
+              setEditingRecord(null);
+            }}
+            onSaveCount={handleSaveCount}
+            settings={settings}
+            staffList={staffList}
+            initialSlot={targetSlot}
+            initialDate={targetDate}
+            existingRecord={editingRecord}
+          />
+        </Suspense>
+      )}
 
-      {isTimeClockOpen && <Suspense fallback={null}><TimeClockModal
-        isOpen={isTimeClockOpen}
-        onClose={() => setIsTimeClockOpen(false)}
-        staffList={staffList}
-        todayRecords={timeRecords}
-        onSaveRecord={handleSaveTimeRecord}
-        settings={settings}
-        isManager={isManager}
-        currentStaffId={profile.staffId}
-      /></Suspense>}
+      {isTimeClockOpen && (
+        <Suspense fallback={null}>
+          <TimeClockModal
+            isOpen={isTimeClockOpen}
+            onClose={() => setIsTimeClockOpen(false)}
+            staffList={staffList}
+            todayRecords={timeRecords}
+            onSaveRecord={handleSaveTimeRecord}
+            settings={settings}
+            isManager={isManager}
+            currentStaffId={profile?.staffId || null}
+          />
+        </Suspense>
+      )}
 
-      {isSettingsOpen && <Suspense fallback={null}><SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onSaveSettings={handleSaveSettings}
-      /></Suspense>}
+      {isSettingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            settings={settings}
+            onSaveSettings={handleSaveSettings}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

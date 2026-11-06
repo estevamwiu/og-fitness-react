@@ -29,8 +29,9 @@ export const DEFAULT_STAFF: StaffMember[] = [
   {
     id: 'st-1',
     name: 'Carlos Eduardo Silva',
-    role: 'Instrutor',
-    pin: '1234',
+    username: 'carlos',
+    role: 'Professor',
+    pin: '123456',
     email: 'carlos.silva@condogym.com.br',
     phone: '(11) 98765-4321',
     color: '#10B981', // Emerald
@@ -41,8 +42,9 @@ export const DEFAULT_STAFF: StaffMember[] = [
   {
     id: 'st-2',
     name: 'Mariana Costa Ribeiro',
-    role: 'Instrutor',
-    pin: '2345',
+    username: 'mariana',
+    role: 'Professor',
+    pin: '234567',
     email: 'mariana.costa@condogym.com.br',
     phone: '(11) 97654-3210',
     color: '#3B82F6', // Blue
@@ -53,8 +55,9 @@ export const DEFAULT_STAFF: StaffMember[] = [
   {
     id: 'st-3',
     name: 'Rafael Mendes Rocha',
-    role: 'Personal Trainer',
-    pin: '3456',
+    username: 'rafael',
+    role: 'Professor',
+    pin: '345678',
     email: 'rafael.rocha@condogym.com.br',
     phone: '(11) 96543-2109',
     color: '#F59E0B', // Amber
@@ -65,8 +68,9 @@ export const DEFAULT_STAFF: StaffMember[] = [
   {
     id: 'st-4',
     name: 'Juliana Beatriz Santos',
-    role: 'Estagiário',
-    pin: '4567',
+    username: 'juliana',
+    role: 'Professor',
+    pin: '456789',
     email: 'juliana.santos@condogym.com.br',
     phone: '(11) 95432-1098',
     color: '#8B5CF6', // Purple
@@ -242,7 +246,7 @@ export function generateSeedTimeRecords(): TimeRecord[] {
     id: `tr-today-1`,
     staffId: 'st-1',
     staffName: 'Carlos Eduardo Silva',
-    staffRole: 'Instrutor',
+    staffRole: 'Professor',
     date: todayKey,
     time: '05:56:42',
     timestamp: new Date(`${todayKey}T05:56:42`).getTime(),

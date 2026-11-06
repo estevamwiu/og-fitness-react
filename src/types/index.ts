@@ -4,8 +4,9 @@ export type LegacyPunchType = 'INTERVALO_SAIDA' | 'INTERVALO_RETORNO';
 export interface StaffMember {
   id: string;
   name: string;
-  role: 'Instrutor' | 'Personal Trainer' | 'Estagiário' | 'Coordenador' | 'Recepcionista';
-  pin?: string;
+  username?: string; // Nome de usuário para login
+  role: 'Professor';
+  pin?: string; // PIN de 6 dígitos numéricos para login simples
   email?: string;
   phone?: string;
   avatar?: string;
