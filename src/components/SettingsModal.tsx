@@ -197,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold text-white">Alerta Sonoro a Cada 30 Minutos</div>
-                <div className="text-[11px] text-[#777]">Toca um sinal agradável para lembrar o instrutor</div>
+                <div className="text-[11px] text-[#777]">Toca um sinal agradável para lembrar o professor</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

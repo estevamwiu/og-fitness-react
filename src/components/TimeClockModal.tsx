@@ -96,9 +96,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
   };
 
   const getPunchTypeLabel = (type: TimeRecord['type']) => {
-    if (type === 'ENTRADA') return 'Entrada no Turno';
-    if (type === 'SAIDA') return 'Saída Final do Turno';
-    return 'Registro antigo de intervalo';
+    return type === 'ENTRADA' ? 'Entrada no Turno' : 'Saída Final do Turno';
   };
 
   return (
@@ -255,7 +253,7 @@ export const TimeClockModal: React.FC<TimeClockModalProps> = ({
                       >
                         <span className="text-[#E2E8F0] font-bold">{r.time.slice(0, 5)}</span>
                         <span className="text-[#777] text-[10px]">
-                          ({r.type === 'ENTRADA' ? 'Entrada' : r.type === 'SAIDA' ? 'Saída' : 'Registro antigo'})
+                          ({r.type === 'ENTRADA' ? 'Entrada' : 'Saída'})
                         </span>
                       </span>
                     ))}

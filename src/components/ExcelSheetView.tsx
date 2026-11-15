@@ -252,7 +252,7 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
                   <th className="px-4 py-3">Musculação</th>
                   <th className="px-4 py-3">Cardio</th>
                   <th className="px-4 py-3">Funcional</th>
-                  <th className="px-4 py-3">Instrutor Responsável</th>
+                  <th className="px-4 py-3">Professor Responsável</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Ação</th>
                 </tr>

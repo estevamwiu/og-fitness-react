@@ -45,7 +45,7 @@ create table if not exists public.staff_payroll (
   updated_at timestamptz not null default now()
 );
 
--- 4. Tabela de Batidas de Ponto Eletrônico
+-- 4. Tabela de Batidas de Ponto Eletrônico (Apenas Entrada e Saída)
 create table if not exists public.time_records (
   id text primary key,
   staff_id text not null references public.staff(id),
@@ -54,12 +54,16 @@ create table if not exists public.time_records (
   date date not null,
   time text not null,
   timestamp bigint not null,
-  type text not null check (type in ('ENTRADA', 'SAIDA', 'INTERVALO_SAIDA', 'INTERVALO_RETORNO')),
+  type text not null check (type in ('ENTRADA', 'SAIDA')),
   location text not null,
   notes text,
   code text not null,
   created_at timestamptz not null default now()
 );
+
+-- Garantir restrição estrita de batidas (somente ENTRADA e SAIDA) para bancos existentes
+alter table public.time_records drop constraint if exists time_records_type_check;
+alter table public.time_records add constraint time_records_type_check check (type in ('ENTRADA', 'SAIDA'));
 
 create index if not exists time_records_staff_date_idx
   on public.time_records (staff_id, date, timestamp);

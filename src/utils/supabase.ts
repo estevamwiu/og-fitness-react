@@ -317,8 +317,8 @@ export async function registerTimePunch(
     const newRecordRow = {
       id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       staff_id: staffId,
-      staff_name: staffData?.name || 'Instrutor',
-      staff_role: staffData?.role || 'Instrutor',
+      staff_name: staffData?.name || 'Professor',
+      staff_role: staffData?.role || 'Professor',
       date,
       time,
       timestamp: now.getTime(),

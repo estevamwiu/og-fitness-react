@@ -96,7 +96,7 @@ export const TimeClockView: React.FC<TimeClockViewProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-[#777] max-w-xl">
-            Registro de entrada, saída e espelho de ponto dos instrutores e equipe da academia do condomínio.
+            Registro de entrada, saída e espelho de ponto dos professores da academia do condomínio.
           </p>
         </div>
 

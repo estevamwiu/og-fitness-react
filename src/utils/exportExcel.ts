@@ -80,7 +80,7 @@ export function exportOccupancyGridCSV(
 
   lines.push('');
   lines.push('"--- DETALHAMENTO DE REGISTROS POR ZONA E RESPONSÁVEL ---"');
-  lines.push('"Data";"Horário (Slot)";"Total Alunos";"Musculação";"Cardio";"Funcional";"Outros";"Capacidade %";"Instrutor Responsável";"Observação"');
+  lines.push('"Data";"Horário (Slot)";"Total Alunos";"Musculação";"Cardio";"Funcional";"Outros";"Capacidade %";"Professor Responsável";"Observação"');
 
   // Detailed records list
   filtered
@@ -162,11 +162,7 @@ export function exportTimeRecordsCSV(
   filtered
     .sort((a, b) => b.timestamp - a.timestamp)
     .forEach((rec) => {
-      const typeLabel = rec.type === 'ENTRADA'
-        ? 'Entrada'
-        : rec.type === 'SAIDA'
-        ? 'Saída'
-        : 'Registro antigo (intervalo)';
+      const typeLabel = rec.type === 'ENTRADA' ? 'Entrada' : 'Saída';
 
       const row = [
         rec.code || '-',

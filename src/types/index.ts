@@ -1,5 +1,4 @@
 export type PunchType = 'ENTRADA' | 'SAIDA';
-export type LegacyPunchType = 'INTERVALO_SAIDA' | 'INTERVALO_RETORNO';
 
 export interface StaffMember {
   id: string;
@@ -25,7 +24,7 @@ export interface TimeRecord {
   date: string; // YYYY-MM-DD
   time: string; // HH:mm:ss
   timestamp: number;
-  type: PunchType | LegacyPunchType;
+  type: PunchType;
   location: string;
   notes?: string;
   code: string; // Electronic receipt voucher code (e.g., "PG-8492-CD")

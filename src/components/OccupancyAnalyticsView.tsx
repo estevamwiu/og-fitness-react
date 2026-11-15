@@ -279,7 +279,7 @@ export const OccupancyAnalyticsView: React.FC<OccupancyAnalyticsViewProps> = ({
               <div className="bg-[#0d0d0d] p-3 rounded-xl border border-[#222]">
                 <span className="font-semibold text-[#00F201]">Pico Noturno (17h30 às 20h30):</span>
                 <p className="text-[#777] mt-0.5">
-                  Maior demanda dos moradores. Recomendado manter 2 instrutores na sala para auxílio de aparelhos e segurança.
+                  Maior demanda dos moradores. Recomendado manter 2 professores na sala para auxílio de aparelhos e segurança.
                 </p>
               </div>
               <div className="bg-[#0d0d0d] p-3 rounded-xl border border-[#222]">

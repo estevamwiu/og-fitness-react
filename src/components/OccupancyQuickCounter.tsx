@@ -108,7 +108,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
         outros,
       },
       loggedByStaffId: selectedStaff?.id || 'unknown',
-      loggedByStaffName: selectedStaff?.name || 'Instrutor',
+      loggedByStaffName: selectedStaff?.name || 'Professor',
       notes: notes.trim(),
       status,
     };
@@ -364,7 +364,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
             <div>
               <label className="block text-[10px] font-semibold text-[#777] uppercase tracking-wider mb-1 flex items-center gap-1">
                 <UserCheck className="w-3 h-3 text-[#E2E8F0]" />
-                Instrutor Responsável
+                Professor Responsável
               </label>
               <select
                 value={selectedStaffId}
