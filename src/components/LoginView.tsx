@@ -25,13 +25,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Quick fill helper for testing
-  const handleQuickFill = (user: string, pinCode: string) => {
-    setUsername(user);
-    setPin(pinCode);
-    setError(null);
-  };
-
   const handleKeypadPress = (val: string) => {
     setError(null);
     if (val === 'backspace') {
@@ -296,34 +289,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
             >
               {isSubmitting ? 'Verificando...' : 'Entrar no Ponto'}
             </button>
-
-            {/* Demo quick access buttons */}
-            <div className="pt-2 border-t border-[#222] text-center space-y-1.5">
-              <p className="text-[10px] text-[#666]">Contas de teste para professores:</p>
-              <div className="flex flex-wrap justify-center gap-1.5 text-[10px]">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('carlos', '123456')}
-                  className="px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#222] text-[#aaa] border border-[#2a2a2a]"
-                >
-                  carlos / 123456
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('mariana', '234567')}
-                  className="px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#222] text-[#aaa] border border-[#2a2a2a]"
-                >
-                  mariana / 234567
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('rafael', '345678')}
-                  className="px-2 py-1 rounded bg-[#1a1a1a] hover:bg-[#222] text-[#aaa] border border-[#2a2a2a]"
-                >
-                  rafael / 345678
-                </button>
-              </div>
-            </div>
           </form>
         )}
 
