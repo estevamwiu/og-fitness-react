@@ -36,6 +36,9 @@ import {
   linkStaffAccount,
   saveHoliday,
   saveStaff,
+  deleteStaff,
+  fetchGymSettings,
+  saveGymSettings,
   registerTimePunch,
   updateStaffHourlyRate,
   UserProfile,
@@ -171,33 +174,33 @@ export default function App() {
         try {
           activeProfile = await fetchProfile(session.user.id);
           isManager = activeProfile.role === 'manager';
-        } catch {
-          // If profiles table is empty or pending, assume manager for authenticated Supabase user
-          activeProfile = {
-            id: session.user.id,
-            role: 'manager',
-            staffId: null,
-          };
-          isManager = true;
+        } catch (reason) {
+          if (active) {
+            setDataError(reason instanceof Error ? reason.message : 'Não foi possível verificar o perfil.');
+            setIsDataLoading(false);
+          }
+          return;
         }
       } else {
         return;
       }
 
       try {
-        const [staff, records, customHolidays] = await Promise.all([
+        const [staff, records, customHolidays, gymSettings] = await Promise.all([
           fetchStaff(isManager).catch(() => storage.getStaff()),
           fetchTimeRecords().catch(() => storage.getTimeRecords()),
           isManager ? fetchHolidays().catch(() => []) : Promise.resolve([]),
+          fetchGymSettings().catch(() => null),
         ]);
 
         if (active) {
           setProfile(activeProfile);
-          setStaffList(staff && staff.length > 0 ? staff : storage.getStaff());
+          setStaffList(staff);
           setTimeRecords(records && records.length > 0 ? records : storage.getTimeRecords());
           setHolidays(customHolidays);
+          if (gymSettings) setSettings(gymSettings);
           if (!isManager) {
-            setActiveTab('timeclock');
+            setActiveTab('dashboard');
           }
         }
       } catch (reason) {
@@ -206,7 +209,7 @@ export default function App() {
           setProfile(activeProfile);
           setStaffList(storage.getStaff());
           setTimeRecords(storage.getTimeRecords());
-          if (!isManager) setActiveTab('timeclock');
+          if (!isManager) setActiveTab('dashboard');
         }
       } finally {
         if (active) setIsDataLoading(false);
@@ -227,27 +230,31 @@ export default function App() {
 
   const todayCounts = occupancyCounts.filter((c) => c.date === todayKey);
 
-  const handleSaveSettings = (newSettings: GymSettings) => {
+  const handleSaveSettings = async (newSettings: GymSettings) => {
+    if (profile?.role !== 'manager') throw new Error('Somente gestores podem salvar configurações.');
+    await saveGymSettings(newSettings);
     setSettings(newSettings);
     storage.saveSettings(newSettings);
   };
 
-  const handleSaveStaffList = async (newList: StaffMember[]) => {
-    try {
-      await saveStaff(newList);
-    } catch {
-      // Fallback
-    }
-    setStaffList(newList);
-    storage.saveStaff(newList);
+  const handleSaveStaff = async (staff: StaffMember) => {
+    await saveStaff([staff]);
+    const updated = staffList.some((member) => member.id === staff.id)
+      ? staffList.map((member) => member.id === staff.id ? staff : member)
+      : [...staffList, staff];
+    setStaffList(updated);
+    storage.saveStaff(updated);
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    await deleteStaff(staffId);
+    const updated = staffList.filter((member) => member.id !== staffId);
+    setStaffList(updated);
+    storage.saveStaff(updated);
   };
 
   const handleUpdateStaffHourlyRate = async (staffId: string, newRate: number) => {
-    try {
-      await updateStaffHourlyRate(staffId, newRate);
-    } catch {
-      // Ignore if offline
-    }
+    await updateStaffHourlyRate(staffId, newRate);
     setStaffList((prev) =>
       prev.map((s) => (s.id === staffId ? { ...s, hourlyRate: newRate } : s))
     );
@@ -377,7 +384,7 @@ export default function App() {
       staffName: staff.name,
       username: staff.username,
     });
-    setActiveTab('timeclock');
+    setActiveTab('dashboard');
   };
 
   // Sign out handler
@@ -429,6 +436,15 @@ export default function App() {
     return <div className="min-h-screen bg-[#0a0a0a] text-[#aaa] grid place-items-center">Carregando dados da academia...</div>;
   }
 
+  if (dataError && !profile) {
+    return (
+      <main className="min-h-screen grid place-content-center gap-3 p-6 text-center">
+        <p role="alert">Não foi possível verificar seu acesso. {dataError}</p>
+        <button type="button" onClick={handleSignOut} className="underline">Voltar ao login</button>
+      </main>
+    );
+  }
+
   const isManager = profile?.role === 'manager';
 
   return (
@@ -460,7 +476,7 @@ export default function App() {
         )}
         <Suspense fallback={<div className="py-12 text-center text-sm text-[#777]">Carregando...</div>}>
         {/* Tab 1: Dashboard (Live 30-min Timeline + Reminder + Charts) */}
-        {activeTab === 'dashboard' && isManager && (
+        {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {/* Smart Reminder / Countdown Ticker */}
             <NextCountReminderBanner
@@ -479,20 +495,20 @@ export default function App() {
             />
 
             {/* Live Occupancy Analytics & Peak Hour Curve */}
-            <OccupancyAnalyticsView
+            {isManager && <OccupancyAnalyticsView
               counts={occupancyCounts}
               settings={settings}
-            />
+            />}
           </div>
         )}
 
         {/* Tab 2: Interactive Excel Spreadsheet Matrix */}
-        {activeTab === 'excel' && isManager && (
+        {activeTab === 'excel' && (
           <ExcelSheetView
             counts={occupancyCounts}
             settings={settings}
             staffList={staffList}
-            onOpenCountModal={(slot, date, existing) => handleOpenSlotToCount(slot, date, existing)}
+            onOpenCountModal={isManager ? handleOpenSlotToCount : undefined}
           />
         )}
 
@@ -521,7 +537,8 @@ export default function App() {
         {activeTab === 'staff' && isManager && (
           <StaffManagementView
             staffList={staffList}
-            onSaveStaffList={handleSaveStaffList}
+            onSaveStaff={handleSaveStaff}
+            onDeleteStaff={handleDeleteStaff}
             onLinkAccount={handleLinkStaffAccount}
             timeRecords={timeRecords}
             settings={settings}
@@ -577,6 +594,7 @@ export default function App() {
             onSaveCount={handleSaveCount}
             settings={settings}
             staffList={staffList}
+            currentStaffId={isManager ? undefined : profile?.staffId ?? undefined}
             initialSlot={targetSlot}
             initialDate={targetDate}
             existingRecord={editingRecord}
@@ -599,7 +617,7 @@ export default function App() {
         </Suspense>
       )}
 
-      {isSettingsOpen && (
+      {isManager && isSettingsOpen && (
         <Suspense fallback={null}>
           <SettingsModal
             isOpen={isSettingsOpen}

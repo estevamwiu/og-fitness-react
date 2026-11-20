@@ -266,10 +266,16 @@ export function calculateMonthlyStaffPayroll(
   let regularMinutes = 0;
   let sundayHolidayMinutes = 0;
 
+  const shift = staff.scheduledShift.match(/^((?:[01]?\d|2[0-3]):[0-5]\d)\s*[-–—]\s*((?:[01]?\d|2[0-3]):[0-5]\d)\b/);
+  const scheduledMinutes = shift ? calculateMinutesBetween(shift[1], shift[2]) : 0;
+
   const daysBreakdown: DayPayrollDetail[] = uniqueDates.map((date) => {
     const dailySummary = computeDailyStaffSummary(staff, records, date);
-    const workedMin = dailySummary.totalWorkedMinutes;
     const specialCheck = isSundayOrHoliday(date, customHolidays);
+    const hasCompletedShift = dailySummary.status === 'FINALIZADO' && dailySummary.totalWorkedMinutes > 0;
+    const workedMin = !specialCheck.isDoubleRate && hasCompletedShift && scheduledMinutes > 0
+      ? Math.max(scheduledMinutes, dailySummary.totalWorkedMinutes)
+      : dailySummary.totalWorkedMinutes;
     
     const [y, m, d] = date.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);

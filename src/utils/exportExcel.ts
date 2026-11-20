@@ -234,7 +234,7 @@ export function exportMonthlyPayrollCSV(
 
   // 2. Detalhamento Dia a Dia de Cada Colaborador
   lines.push('"--- DETALHAMENTO DIÁRIO DE HORAS E VALORES CALCULADOS ---"');
-  lines.push('"Colaborador";"Data";"Dia da Semana";"Classificação do Dia";"Entrada";"Saída";"Horas Trabalhadas";"Multiplicador";"Valor/Hora Aplicado";"Total do Dia (R$)"');
+  lines.push('"Colaborador";"Data";"Dia da Semana";"Classificação do Dia";"Entrada";"Saída";"Horas para Pagamento";"Multiplicador";"Valor/Hora Aplicado";"Total do Dia (R$)"');
 
   staffList.forEach((staff) => {
     const payroll = calculateMonthlyStaffPayroll(staff, records, monthKey, holidays);

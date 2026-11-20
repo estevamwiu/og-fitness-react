@@ -21,7 +21,7 @@ interface ExcelSheetViewProps {
   counts: OccupancyCount[];
   settings: GymSettings;
   staffList: StaffMember[];
-  onOpenCountModal: (slot?: string, date?: string, existingRecord?: OccupancyCount) => void;
+  onOpenCountModal?: (slot?: string, date?: string, existingRecord?: OccupancyCount) => void;
 }
 
 export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
@@ -73,7 +73,7 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
                 Planilha Eletrônica de Ocupação (30 min)
               </h2>
               <p className="text-xs text-[#777]">
-                Substitui a planilha manual do Excel com registro automático, análise de pico e exportação direta.
+                    Consulte as contagens por data e horário.
               </p>
             </div>
           </div>
@@ -118,14 +118,14 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
           </div>
 
           {/* Export Excel / CSV */}
-          <button
+          {onOpenCountModal && <button
             onClick={handleExport}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#00F201] hover:bg-[#00cc01] text-black font-bold rounded-xl text-xs shadow-md shadow-[#00F201]/20 transition-all active:scale-95"
             id="btn-export-excel"
           >
             <Download className="w-4 h-4 text-black" />
             <span>Baixar Planilha Excel</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -135,7 +135,7 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
           <div className="p-3.5 bg-[#141414] border-b border-[#2a2a2a] flex items-center justify-between text-xs text-[#777]">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-white">Matriz de Ocupação por Faixa de 30 minutos</span>
-              <span className="text-[#555]">• Clique em qualquer célula para editar</span>
+              {onOpenCountModal && <span className="text-[#555]">• Clique em qualquer célula para editar</span>}
             </div>
             <div className="flex items-center gap-3 text-[11px]">
               <span className="flex items-center gap-1">
@@ -203,14 +203,14 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
                         return (
                           <td
                             key={slot}
-                            onClick={() => onOpenCountModal(slot, date, record)}
-                            className={`px-1.5 py-2 border-r border-[#2a2a2a]/80 cursor-pointer transition-all hover:ring-1 hover:ring-[#00F201] ${getCellColor(
+                            onClick={onOpenCountModal ? () => onOpenCountModal(slot, date, record) : undefined}
+                            className={`px-1.5 py-2 border-r border-[#2a2a2a]/80 ${onOpenCountModal ? "cursor-pointer hover:ring-1 hover:ring-[#00F201]" : ""} ${getCellColor(
                               record?.count
                             )}`}
                             title={
                               record
                                 ? `${record.count} alunos às ${slot} (Resp: ${record.loggedByStaffName})`
-                                : `Clique para registrar ${slot}`
+                                : onOpenCountModal ? `Clique para registrar ${slot}` : undefined
                             }
                           >
                             {record ? record.count : '-'}
@@ -254,7 +254,7 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
                   <th className="px-4 py-3">Funcional</th>
                   <th className="px-4 py-3">Professor Responsável</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Ação</th>
+                  {onOpenCountModal && <th className="px-4 py-3">Ação</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#222222] font-mono text-[#ccc]">
@@ -283,14 +283,14 @@ export const ExcelSheetView: React.FC<ExcelSheetViewProps> = ({
                           {rec.status === 'lotado' ? 'Lotado' : rec.status === 'alerta' ? 'Alto' : 'Normal'}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      {onOpenCountModal && <td className="px-4 py-2.5">
                         <button
                           onClick={() => onOpenCountModal(rec.timeSlot, rec.date, rec)}
                           className="text-[#00F201] hover:text-[#00cc01] text-[11px] font-sans font-semibold underline"
                         >
                           Editar
                         </button>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
               </tbody>

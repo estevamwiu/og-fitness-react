@@ -8,7 +8,6 @@ import {
   Users, 
   Clock, 
   RotateCcw, 
-  Check,
   Dumbbell
 } from 'lucide-react';
 import { GymSettings } from '../types';
@@ -19,7 +18,7 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: GymSettings;
-  onSaveSettings: (settings: GymSettings) => void;
+  onSaveSettings: (settings: GymSettings) => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -29,7 +28,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveSettings,
 }) => {
   const [formData, setFormData] = useState<GymSettings>({ ...settings });
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -37,14 +37,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     soundEffects.playReminderChime();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveSettings(formData);
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSaveSettings(formData);
       onClose();
-    }, 800);
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Não foi possível salvar as configurações.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleResetData = () => {
@@ -233,6 +237,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
+          {saveError && <p role="alert" className="text-[#ff7777]">{saveError}</p>}
+
           {/* Footer */}
           <div className="p-3 bg-[#0d0d0d] rounded-xl border border-[#2a2a2a] flex justify-end gap-2 pt-3">
             <button
@@ -244,19 +250,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               type="submit"
+              disabled={isSaving}
               className="flex items-center gap-1.5 px-5 py-2 bg-[#00F201] hover:bg-[#00cc01] text-black font-bold rounded-lg shadow-md shadow-[#00F201]/20 transition-all active:scale-95 cursor-pointer"
             >
-              {savedSuccess ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>Salvo!</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Salvar Alterações</span>
-                </>
-              )}
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'Salvando...' : 'Salvar alterações'}</span>
             </button>
           </div>
         </form>

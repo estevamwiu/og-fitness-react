@@ -9,7 +9,6 @@ import {
   Clock, 
   CheckCircle2, 
   X,
-  UserCheck,
   DollarSign,
   Link2
 } from 'lucide-react';
@@ -18,7 +17,8 @@ import { computeDailyStaffSummary, formatMinutesToHours, formatDateBR, formatCur
 
 interface StaffManagementViewProps {
   staffList: StaffMember[];
-  onSaveStaffList: (list: StaffMember[]) => Promise<void>;
+  onSaveStaff: (staff: StaffMember) => Promise<void>;
+  onDeleteStaff: (id: string) => Promise<void>;
   onLinkAccount: (staff: StaffMember) => Promise<void>;
   timeRecords: TimeRecord[];
   settings: GymSettings;
@@ -26,7 +26,8 @@ interface StaffManagementViewProps {
 
 export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
   staffList,
-  onSaveStaffList,
+  onSaveStaff,
+  onDeleteStaff,
   onLinkAccount,
   timeRecords,
   settings,
@@ -44,7 +45,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [scheduledShift, setScheduledShift] = useState('06:00 - 14:00');
-  const [hourlyRate, setHourlyRate] = useState<number>(0);
+  const [hourlyRate, setHourlyRate] = useState('');
   const [color, setColor] = useState('#10B981');
 
   const todayKey = formatDateKey();
@@ -59,7 +60,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     setEmail('');
     setPhone('');
     setScheduledShift('06:00 - 14:00');
-    setHourlyRate(0);
+    setHourlyRate('');
     setColor('#10B981');
     setIsModalOpen(true);
   };
@@ -74,26 +75,22 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     setEmail(staff.email || '');
     setPhone(staff.phone || '');
     setScheduledShift(staff.scheduledShift);
-    setHourlyRate(staff.hourlyRate || 0);
+    setHourlyRate(staff.hourlyRate?.toString() || '');
     setColor(staff.color);
     setIsModalOpen(true);
   };
 
-  const handleToggleActive = async (staff: StaffMember) => {
-    if (staff.active && staffList.filter((member) => member.active).length <= 1) {
-      alert('É necessário manter pelo menos um colaborador ativo.');
-      return;
-    }
-    const action = staff.active ? 'desativar' : 'reativar';
-    if (confirm(`Deseja realmente ${action} ${staff.name}?`)) {
-      const updated = staffList.map((member) =>
-        member.id === staff.id ? { ...member, active: !member.active } : member
-      );
-      try {
-        await onSaveStaffList(updated);
-      } catch (reason) {
-        setSaveError(reason instanceof Error ? reason.message : 'Não foi possível atualizar a equipe.');
-      }
+  const [deletingStaffId, setDeletingStaffId] = useState<string | null>(null);
+  const handleDelete = async (staff: StaffMember) => {
+    if (!confirm(`Excluir ${staff.name}? As batidas de ponto serão preservadas.`)) return;
+    setSaveError(null);
+    setDeletingStaffId(staff.id);
+    try {
+      await onDeleteStaff(staff.id);
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Não foi possível excluir o colaborador.');
+    } finally {
+      setDeletingStaffId(null);
     }
   };
 
@@ -113,7 +110,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
       return;
     }
 
-    const rateNum = Number(hourlyRate);
+    const rateNum = Number(hourlyRate.replace(',', '.'));
     if (!Number.isFinite(rateNum) || rateNum <= 0) {
       setSaveError('Informe um valor por hora maior que zero.');
       return;
@@ -122,40 +119,20 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     const derivedEmail = email.trim() || `${cleanUsername}@ogfitness.local`;
 
     try {
-      if (editingStaff) {
-        const updated = staffList.map((s) =>
-          s.id === editingStaff.id
-            ? {
-                ...s,
-                name: name.trim(),
-                username: cleanUsername,
-                pin: cleanPin,
-                role,
-                email: derivedEmail,
-                phone: phone.trim() || undefined,
-                scheduledShift: scheduledShift.trim(),
-                hourlyRate: rateNum,
-                color,
-              }
-            : s
-        );
-        await onSaveStaffList(updated);
-      } else {
-        const newStaff: StaffMember = {
-          id: `st-${Date.now()}`,
-          name: name.trim(),
-          username: cleanUsername,
-          pin: cleanPin,
-          role,
-          email: derivedEmail,
-          phone: phone.trim() || undefined,
-          scheduledShift: scheduledShift.trim(),
-          hourlyRate: rateNum,
-          color,
-          active: true,
-        };
-        await onSaveStaffList([...staffList, newStaff]);
-      }
+      await onSaveStaff({
+        ...editingStaff,
+        id: editingStaff?.id ?? crypto.randomUUID(),
+        active: editingStaff?.active ?? true,
+        name: name.trim(),
+        username: cleanUsername,
+        pin: cleanPin,
+        role,
+        email: derivedEmail,
+        phone: phone.trim() || undefined,
+        scheduledShift: scheduledShift.trim(),
+        hourlyRate: rateNum,
+        color,
+      });
       setIsModalOpen(false);
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : 'Não foi possível salvar o colaborador.');
@@ -244,11 +221,13 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => void handleToggleActive(staff)}
+                      onClick={() => void handleDelete(staff)}
                       className="p-1.5 text-[#777] hover:text-[#ff4444] hover:bg-[#1a1a1a] rounded-lg transition-colors cursor-pointer"
-                      title={staff.active ? 'Desativar colaborador' : 'Reativar colaborador'}
+                      disabled={deletingStaffId !== null}
+                      title="Excluir colaborador"
+                      aria-label={`Excluir ${staff.name}`}
                     >
-                      {staff.active ? <Trash2 className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -454,13 +433,12 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                   <div className="relative">
                     <span className="absolute left-2.5 top-2 text-[#777] font-mono text-xs">R$</span>
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       required
                       placeholder="45.00"
                       value={hourlyRate}
-                      onChange={(e) => setHourlyRate(Number(e.target.value))}
+                      onChange={(e) => setHourlyRate(e.target.value)}
                       className="w-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-lg pl-8 pr-2.5 py-2 text-white font-mono font-bold text-xs focus:border-[#00F201] focus:outline-none"
                     />
                   </div>

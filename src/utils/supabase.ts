@@ -1,5 +1,5 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
-import type { Holiday, PunchType, StaffMember, TimeRecord } from '../types';
+import type { GymSettings, Holiday, PunchType, StaffMember, TimeRecord } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -230,9 +230,6 @@ export async function fetchHolidays(): Promise<Holiday[]> {
 
 export async function saveStaff(staffList: StaffMember[]): Promise<void> {
   const supabase = getSupabase();
-  const { data: currentStaff, error: currentStaffError } = await supabase.from('staff').select('id');
-  throwOnError(currentStaffError);
-
   const staffRows = staffList.map((staff) => ({
     id: staff.id,
     name: staff.name,
@@ -259,14 +256,27 @@ export async function saveStaff(staffList: StaffMember[]): Promise<void> {
     throwOnError(payrollError);
   }
 
-  const retainedIds = new Set(staffList.map((staff) => staff.id));
-  const deactivatedRows = (currentStaff || [])
-    .filter((row) => !retainedIds.has(row.id))
-    .map((row) => row.id);
-  for (const id of deactivatedRows) {
-    const { error: deactivateError } = await supabase.from('staff').update({ active: false }).eq('id', id);
-    throwOnError(deactivateError);
-  }
+}
+
+export async function deleteStaff(staffId: string): Promise<void> {
+  const { data, error } = await getSupabase().from('staff').delete().eq('id', staffId).select('id').maybeSingle();
+  throwOnError(error);
+  if (!data) throw new Error('Colaborador não encontrado ou sem permissão para excluir.');
+}
+
+export async function fetchGymSettings(): Promise<GymSettings | null> {
+  const { data, error } = await getSupabase().from('app_config').select('value').eq('key', 'gym_settings').maybeSingle();
+  throwOnError(error);
+  return data?.value ?? null;
+}
+
+export async function saveGymSettings(settings: GymSettings): Promise<void> {
+  const { error } = await getSupabase().from('app_config').upsert({
+    key: 'gym_settings',
+    value: settings,
+    updated_at: new Date().toISOString(),
+  });
+  throwOnError(error);
 }
 
 export async function registerTimePunch(

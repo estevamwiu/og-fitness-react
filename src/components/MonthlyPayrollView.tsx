@@ -117,7 +117,7 @@ export const MonthlyPayrollView: React.FC<MonthlyPayrollViewProps> = ({
   };
 
   const handleSaveRate = async (staffId: string) => {
-    const rateNum = Number(editingRateValue);
+    const rateNum = Number(editingRateValue.replace(',', '.'));
     if (!Number.isFinite(rateNum) || rateNum <= 0) {
       alert('Informe um valor por hora válido maior que zero.');
       return;
@@ -301,14 +301,14 @@ export const MonthlyPayrollView: React.FC<MonthlyPayrollViewProps> = ({
           <div className="bg-[#0d0d0d] border border-[#222] rounded-xl p-3.5 border-l-2 border-l-[#00F201]">
             <p className="text-[10px] uppercase tracking-wider text-[#00F201] font-semibold">Total Bruto a Pagar</p>
             <p className="mt-1 text-xl font-extrabold text-[#00F201] font-mono">{formatCurrencyBRL(totalSalary)}</p>
-            <p className="text-[10px] text-[#777] mt-0.5">Total de {formatMinutesToHours(totalMinutes)} trabalhadas</p>
+            <p className="text-[10px] text-[#777] mt-0.5">Total de {formatMinutesToHours(totalMinutes)} para pagamento</p>
           </div>
         </div>
 
         {hasMissingRates && (
           <div className="rounded-xl border border-[#ffaa00]/30 bg-[#ffaa00]/10 p-3.5 text-xs text-[#ffcc66] flex items-center justify-between gap-3">
             <span>
-              <strong>Atenção:</strong> Há professores com horas trabalhadas sem valor por hora cadastrado. Digite o valor por hora diretamente na tabela abaixo para calcular o salário final.
+              <strong>Atenção:</strong> Há professores com horas apuradas sem valor por hora cadastrado. Digite o valor por hora diretamente na tabela abaixo para calcular o salário final.
             </span>
           </div>
         )}
@@ -359,9 +359,8 @@ export const MonthlyPayrollView: React.FC<MonthlyPayrollViewProps> = ({
                           <div className="flex items-center gap-1.5 bg-[#0d0d0d] p-1 rounded-lg border border-[#00F201]">
                             <span className="text-[10px] text-[#777] pl-1 font-mono">R$</span>
                             <input
-                              type="number"
-                              min="1"
-                              step="0.5"
+                              type="text"
+                              inputMode="decimal"
                               value={editingRateValue}
                               onChange={(e) => setEditingRateValue(e.target.value)}
                               className="w-20 bg-transparent text-white font-mono text-xs font-bold outline-none"
@@ -549,7 +548,7 @@ export const MonthlyPayrollView: React.FC<MonthlyPayrollViewProps> = ({
                       <div className="text-[11px] text-[#777] mt-1 flex items-center gap-3">
                         <span>Entrada: <strong className="text-white font-mono">{day.entrada || '--:--'}</strong></span>
                         <span>Saída: <strong className="text-white font-mono">{day.saida || '--:--'}</strong></span>
-                        <span>Horas: <strong className="text-white font-mono">{day.workedHours}h</strong></span>
+                        <span>Horas para pagamento: <strong className="text-white font-mono">{day.workedHours}h</strong></span>
                       </div>
                     </div>
 

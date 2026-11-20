@@ -158,13 +158,13 @@ export const Header: React.FC<HeaderProps> = ({
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          <button
+          {isManager && <button
             onClick={onOpenSettings}
             className="p-1.5 text-[#777] hover:text-[#e0e0e0] hover:bg-[#1a1a1a] rounded-lg border border-transparent hover:border-[#2a2a2a] transition-colors"
             title="Configurações da Academia"
           >
             <SettingsIcon className="w-4 h-4" />
-          </button>
+          </button>}
           <div className="hidden sm:block text-right">
             <p className="text-[10px] text-[#777]">{isManager ? 'GESTOR' : 'PROFESSOR'}</p>
             <p className="max-w-40 truncate text-[10px] text-[#aaa]">{userEmail}</p>

@@ -23,6 +23,7 @@ interface OccupancyQuickCounterProps {
   onSaveCount: (count: OccupancyCount) => void;
   settings: GymSettings;
   staffList: StaffMember[];
+  currentStaffId?: string;
   initialSlot?: string;
   initialDate?: string;
   existingRecord?: OccupancyCount | null;
@@ -34,6 +35,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
   onSaveCount,
   settings,
   staffList,
+  currentStaffId,
   initialSlot,
   initialDate,
   existingRecord,
@@ -82,7 +84,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
   const isWarning = totalCount >= settings.warningCapacity;
 
   const timeSlots = generateTimeSlots(settings.openingTime, settings.closingTime);
-  const selectedStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
+  const selectedStaff = staffList.find((s) => s.id === (currentStaffId ?? selectedStaffId)) || staffList[0];
 
   const handleQuickAdd = (amount: number) => {
     // Add to musculacao by default or distribute
@@ -367,7 +369,8 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
                 Professor Responsável
               </label>
               <select
-                value={selectedStaffId}
+                value={currentStaffId ?? selectedStaffId}
+                disabled={Boolean(currentStaffId)}
                 onChange={(e) => setSelectedStaffId(e.target.value)}
                 className="w-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#00F201] cursor-pointer"
               >
