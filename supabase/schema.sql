@@ -48,7 +48,7 @@ create table if not exists public.staff_payroll (
 -- 4. Tabela de Batidas de Ponto Eletrônico (Apenas Entrada e Saída)
 create table if not exists public.time_records (
   id text primary key,
-  staff_id text not null references public.staff(id),
+  staff_id text not null,
   staff_name text not null,
   staff_role text not null,
   date date not null,
@@ -64,6 +64,9 @@ create table if not exists public.time_records (
 -- Garantir restrição estrita de batidas (somente ENTRADA e SAIDA) para bancos existentes
 alter table public.time_records drop constraint if exists time_records_type_check;
 alter table public.time_records add constraint time_records_type_check check (type in ('ENTRADA', 'SAIDA'));
+
+-- Preserve the employee ID on historical punches after personnel deletion.
+alter table public.time_records drop constraint if exists time_records_staff_id_fkey;
 
 create index if not exists time_records_staff_date_idx
   on public.time_records (staff_id, date, timestamp);
@@ -428,18 +431,3 @@ grant execute on function public.verify_staff_login(text, text) to anon, authent
 grant execute on function public.register_time_punch(text, text, text, text) to anon, authenticated;
 grant execute on function public.link_staff_account(text, text) to authenticated;
 
--- ==============================================================================
--- INSTRUÇÕES DE CONFIGURAÇÃO DOS 2 GESTORES:
--- ==============================================================================
--- 1. Crie os dois usuários gestores na aba Authentication do Supabase:
---    Exemplo: gestor1@ogfitness.com.br e gestor2@ogfitness.com.br
---
--- 2. No SQL Editor do Supabase, promova os dois a 'manager':
---    update public.profiles
---    set role = 'manager'
---    where id in (
---      (select id from auth.users where email = 'gestor1@ogfitness.com.br'),
---      (select id from auth.users where email = 'gestor2@ogfitness.com.br')
---    );
---
--- 3. Cadastre os professores com nome de usuário e PIN de 6 dígitos diretamente no app!

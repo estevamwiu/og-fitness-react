@@ -7,12 +7,10 @@ import {
   Building, 
   Users, 
   Clock, 
-  RotateCcw, 
   Dumbbell
 } from 'lucide-react';
 import { GymSettings } from '../types';
 import { soundEffects } from '../utils/audioAlert';
-import { storage } from '../utils/storage';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -48,12 +46,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setSaveError(reason instanceof Error ? reason.message : 'Não foi possível salvar as configurações.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleResetData = () => {
-    if (confirm('Tem certeza que deseja restaurar os dados padrão de fábrica? Isso recarregará o sistema com novos dados de demonstração.')) {
-      storage.resetAllData();
     }
   };
 
@@ -221,19 +213,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <Volume2 className="w-3.5 h-3.5 text-[#00F201]" />
               <span>Testar Som do Alarme</span>
-            </button>
-          </div>
-
-          {/* Factory Reset */}
-          <div className="pt-2 flex justify-between items-center text-[#777] text-[11px]">
-            <span>Precisa recomeçar com dados limpos?</span>
-            <button
-              type="button"
-              onClick={handleResetData}
-              className="text-[#ff4444] hover:text-red-300 flex items-center gap-1 font-semibold cursor-pointer"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Restaurar Padrões</span>
             </button>
           </div>
 
