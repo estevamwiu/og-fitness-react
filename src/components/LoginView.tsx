@@ -277,7 +277,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn, theme, on
               disabled={isSubmitting || pin.length !== 6 || !username.trim()}
               className="w-full rounded-xl bg-[#00F201] hover:bg-[#00cc01] disabled:opacity-50 py-3 text-sm font-bold text-black shadow-lg shadow-[#00F201]/10 transition-all active:scale-[0.99]"
             >
-              {isSubmitting ? 'Verificando...' : 'Entrar no Ponto'}
+              {isSubmitting ? 'Verificando...' : 'Fazer login'}
             </button>
           </form>
         )}
@@ -334,7 +334,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn, theme, on
               disabled={isSubmitting}
               className="w-full rounded-xl bg-[#00F201] hover:bg-[#00cc01] disabled:opacity-50 py-3 text-sm font-bold text-black shadow-lg shadow-[#00F201]/10 transition-all active:scale-[0.99]"
             >
-              {isSubmitting ? 'Acessando Gestão...' : 'Entrar como Gestor'}
+              {isSubmitting ? 'Acessando Gestão...' : 'Fazer login'}
             </button>
           </form>
         )}
