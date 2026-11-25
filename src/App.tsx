@@ -438,6 +438,8 @@ export default function App() {
     }
   };
 
+  const handleToggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark');
+
   if (!isSupabaseConfigured) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
@@ -462,7 +464,7 @@ export default function App() {
   if (!session && !professorUser) {
     return (
       <>
-        <LoginView onStaffLoggedIn={handleStaffLoggedIn} />
+        <LoginView onStaffLoggedIn={handleStaffLoggedIn} theme={theme} onToggleTheme={handleToggleTheme} />
         {authError && <p role="alert" className="fixed bottom-4 left-4 right-4 text-center text-sm text-[#ff7777]">{authError}</p>}
       </>
     );
@@ -494,7 +496,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         theme={theme}
-        onToggleTheme={() => setTheme((currentTheme) => currentTheme === 'dark' ? 'light' : 'dark')}
+        onToggleTheme={handleToggleTheme}
         onOpenTimeClock={() => setIsTimeClockOpen(true)}
         onOpenQuickCount={() => handleOpenSlotToCount()}
         onOpenSettings={() => setIsSettingsOpen(true)}

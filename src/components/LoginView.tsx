@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { LockKeyhole, Mail, User, ShieldCheck, Eye, EyeOff, Hash, Delete } from 'lucide-react';
+import { LockKeyhole, Mail, User, ShieldCheck, Eye, EyeOff, Hash, Delete, Moon, Sun } from 'lucide-react';
 import ogFitnessLogo from '../assets/og-fitness-logo.png';
 import { getSupabase, verifyStaffLogin, isSupabaseConfigured } from '../utils/supabase';
 import type { ProfessorSession } from '../utils/supabase';
 
 interface LoginViewProps {
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
   onStaffLoggedIn?: (session: ProfessorSession) => void;
   onManagerLoggedIn?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn, theme, onToggleTheme }) => {
   const [loginMode, setLoginMode] = useState<'professor' | 'manager'>('professor');
 
   // Professor states
@@ -99,7 +101,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex items-center justify-center p-4">
+    <main className="relative min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex items-center justify-center px-4 py-16">
+      <button
+        type="button"
+        onClick={onToggleTheme}
+        aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        className="absolute right-4 top-4 grid size-9 place-items-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] text-white hover:border-[#00F201] focus-visible:outline-2 focus-visible:outline-[#00F201] sm:right-6 sm:top-6"
+      >
+        {theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />}
+      </button>
       <div className="w-full max-w-md bg-[#141414] border border-[#2a2a2a] rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl shadow-black/60">
         {/* Brand Header */}
         <div className="text-center space-y-2">
@@ -144,7 +155,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Gestor (2 Gestores)</span>
+            <span>Gestor</span>
           </button>
         </div>
 
@@ -154,7 +165,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
             <div className="space-y-1">
               <label className="text-xs font-medium text-[#aaa] flex items-center justify-between">
                 <span>Nome de Usuário</span>
-                <span className="text-[10px] text-[#555]">ex: carlos, mariana</span>
+                <span className="text-[10px] text-[#555]">ex: carlos, mariana</span>  
               </label>
               <div className="flex items-center gap-2 bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl px-3.5 focus-within:border-[#00F201] transition-colors">
                 <User className="w-4 h-4 text-[#777]" />
