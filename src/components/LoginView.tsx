@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Dumbbell, LockKeyhole, Mail, User, ShieldCheck, Eye, EyeOff, Hash, Delete } from 'lucide-react';
 import { getSupabase, verifyStaffLogin, isSupabaseConfigured } from '../utils/supabase';
-import { StaffMember } from '../types';
-import { storage } from '../utils/storage';
+import type { ProfessorSession } from '../utils/supabase';
 
 interface LoginViewProps {
-  onStaffLoggedIn?: (staff: StaffMember) => void;
+  onStaffLoggedIn?: (session: ProfessorSession) => void;
   onManagerLoggedIn?: () => void;
 }
 
@@ -61,36 +60,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
 
     setIsSubmitting(true);
     try {
-      // 1. First attempt verification via Supabase RPC/DB
-      if (isSupabaseConfigured) {
-        const result = await verifyStaffLogin(cleanUser, pin);
-        if (result.success && result.staff) {
-          if (onStaffLoggedIn) {
-            onStaffLoggedIn(result.staff);
-            return;
-          }
-        }
+      const result = await verifyStaffLogin(cleanUser, pin);
+      if (result) {
+        onStaffLoggedIn?.(result);
+      } else {
+        setError('Nome de usuário ou PIN de 6 dígitos incorreto.');
       }
-
-      // 2. Check local fallback staff (useful before full DB migration or offline)
-      const localStaff = storage.getStaff();
-      const matched = localStaff.find(
-        (s) =>
-          s.active &&
-          ((s.username && s.username.toLowerCase() === cleanUser) ||
-            s.name.toLowerCase().includes(cleanUser) ||
-            s.email?.toLowerCase().startsWith(cleanUser)) &&
-          s.pin === pin
-      );
-
-      if (matched) {
-        if (onStaffLoggedIn) {
-          onStaffLoggedIn(matched);
-          return;
-        }
-      }
-
-      setError('Nome de usuário ou PIN de 6 dígitos incorreto.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível autenticar.');
     } finally {

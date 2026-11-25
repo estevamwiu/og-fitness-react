@@ -1,5 +1,5 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
-import type { GymSettings, Holiday, PunchType, StaffMember, TimeRecord } from '../types';
+import type { GymSettings, Holiday, OccupancyCount, PunchType, StaffMember, TimeRecord } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -79,10 +79,12 @@ export async function fetchProfile(userId: string): Promise<UserProfile> {
 export async function fetchStaff(isManager: boolean): Promise<StaffMember[]> {
   const supabase = getSupabase();
   const [{ data: staffRows, error: staffError }, payrollResult, profilesResult] = await Promise.all([
-    supabase
-      .from('staff')
-      .select('id, name, username, pin, role, email, phone, color, active, scheduled_shift')
-      .order('name'),
+    isManager
+      ? supabase.rpc('read_manager_staff')
+      : supabase
+        .from('staff')
+        .select('id, name, username, role, email, phone, color, active, scheduled_shift')
+        .order('name'),
     isManager
       ? supabase.from('staff_payroll').select('staff_id, hourly_rate')
       : Promise.resolve({ data: [], error: null }),
@@ -125,77 +127,60 @@ export async function updateStaffHourlyRate(staffId: string, hourlyRate: number)
   throwOnError(error);
 }
 
-export async function verifyStaffLogin(
-  username: string,
-  pin: string,
-): Promise<{ success: boolean; staff?: StaffMember; error?: string }> {
-  const supabase = getSupabase();
-  const cleanUsername = username.trim().toLowerCase();
-  const cleanPin = pin.trim();
-
-  try {
-    const { data, error } = await supabase.rpc('verify_staff_login', {
-      p_username: cleanUsername,
-      p_pin: cleanPin,
-    });
-
-    if (!error && data) {
-      if (data.success && data.staff) {
-        return {
-          success: true,
-          staff: {
-            id: data.staff.id,
-            name: data.staff.name,
-            username: data.staff.username,
-            role: data.staff.role,
-            color: data.staff.color,
-            active: true,
-            scheduledShift: data.staff.scheduledShift,
-            hourlyRate: Number(data.staff.hourlyRate) || 0,
-          },
-        };
-      }
-      return { success: false, error: data.error || 'Nome de usuário ou PIN incorreto.' };
-    }
-  } catch {
-    // If RPC is not available yet, fallback to direct staff table query
-  }
-
-  // Fallback to direct query on staff table
-  const { data: staffData, error: directError } = await supabase
-    .from('staff')
-    .select('id, name, username, pin, role, color, active, scheduled_shift')
-    .ilike('username', cleanUsername)
-    .eq('pin', cleanPin)
-    .eq('active', true)
-    .maybeSingle();
-
-  if (directError || !staffData) {
-    return { success: false, error: 'Nome de usuário ou PIN de 6 dígitos inválido.' };
-  }
-
-  return {
-    success: true,
-    staff: {
-      id: staffData.id,
-      name: staffData.name,
-      username: staffData.username || undefined,
-      role: staffData.role,
-      color: staffData.color,
-      active: staffData.active,
-      scheduledShift: staffData.scheduled_shift,
-      hourlyRate: 0,
-    },
-  };
+export interface ProfessorSession {
+  staff: StaffMember;
+  token: string;
 }
 
-export async function fetchTimeRecords(): Promise<TimeRecord[]> {
+export async function verifyStaffLogin(username: string, pin: string): Promise<ProfessorSession | null> {
+  const { data, error } = await getSupabase().rpc('start_staff_device_session', {
+    p_username: username.trim().toLowerCase(),
+    p_pin: pin.trim(),
+  });
+  throwOnError(error);
+  if (!data?.success || !data.token) return null;
+  return { staff: { ...data.staff, active: true }, token: data.token };
+}
+
+export async function fetchOccupancy(token?: string): Promise<OccupancyCount[]> {
+  const counts: OccupancyCount[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await getSupabase().rpc('read_shared_occupancy', {
+      p_token: token ?? null,
+    }).range(from, from + 999);
+    throwOnError(error);
+    const rows = data ?? [];
+    counts.push(...rows.map((row: { payload: OccupancyCount }) => row.payload));
+    if (rows.length < 1000) return counts;
+  }
+}
+
+export async function saveOccupancyCount(count: OccupancyCount, token?: string): Promise<OccupancyCount> {
+  const { data, error } = await getSupabase().rpc('save_shared_occupancy', {
+    p_count: count,
+    p_token: token ?? null,
+  });
+  throwOnError(error);
+  return data;
+}
+
+export async function importOccupancyCounts(counts: OccupancyCount[]): Promise<void> {
+  for (let from = 0; from < counts.length; from += 500) {
+    const rows = counts.slice(from, from + 500).map((count) => ({
+      date: count.date, time_slot: count.timeSlot, payload: count,
+    }));
+    const { error } = await getSupabase().from('occupancy_counts')
+      .upsert(rows, { onConflict: 'date,time_slot', ignoreDuplicates: true });
+    throwOnError(error);
+  }
+}
+
+export async function fetchTimeRecords(token?: string): Promise<TimeRecord[]> {
   const supabase = getSupabase();
   const rows: TimeRecordRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
-      .from('time_records')
-      .select('id, staff_id, staff_name, staff_role, date, time, timestamp, type, location, notes, code')
+      .rpc('read_shared_punches', { p_token: token ?? null })
       .order('timestamp', { ascending: false })
       .order('id', { ascending: false })
       .range(from, from + 999);
@@ -204,7 +189,11 @@ export async function fetchTimeRecords(): Promise<TimeRecord[]> {
     if (!data || data.length < 1000) break;
   }
 
-  return rows.map((row) => ({
+  return rows.map(mapTimeRecord);
+}
+
+function mapTimeRecord(row: TimeRecordRow): TimeRecord {
+  return {
     id: row.id,
     staffId: row.staff_id,
     staffName: row.staff_name,
@@ -216,7 +205,7 @@ export async function fetchTimeRecords(): Promise<TimeRecord[]> {
     location: row.location,
     notes: row.notes || undefined,
     code: row.code,
-  }));
+  };
 }
 
 export async function fetchHolidays(): Promise<Holiday[]> {
@@ -242,7 +231,7 @@ export async function saveStaff(staffList: StaffMember[]): Promise<void> {
     active: staff.active,
     scheduled_shift: staff.scheduledShift,
   }));
-  const { error: staffError } = await supabase.from('staff').upsert(staffRows);
+  const { error: staffError } = await supabase.rpc('save_manager_staff', { p_staff: staffRows });
   throwOnError(staffError);
 
   const payrollRows = staffList
@@ -284,79 +273,17 @@ export async function registerTimePunch(
   type: PunchType,
   location: string,
   notes?: string,
+  token?: string,
 ): Promise<TimeRecord> {
-  const supabase = getSupabase();
-  try {
-    const { data, error } = await supabase
-      .rpc('register_time_punch', {
-        p_staff_id: staffId,
-        p_type: type,
-        p_location: location,
-        p_notes: notes || null,
-      })
-      .single();
-    if (error) throw error;
-
-    const row = data as TimeRecordRow;
-    return {
-      id: row.id,
-      staffId: row.staff_id,
-      staffName: row.staff_name,
-      staffRole: row.staff_role,
-      date: row.date,
-      time: row.time,
-      timestamp: row.timestamp,
-      type: row.type,
-      location: row.location,
-      notes: row.notes || undefined,
-      code: row.code,
-    };
-  } catch (rpcErr) {
-    // If RPC execution fails (e.g. schema needs direct insert), fallback to client-side insert
-    const { data: staffData } = await supabase
-      .from('staff')
-      .select('name, role')
-      .eq('id', staffId)
-      .single();
-
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    const time = now.toLocaleTimeString('pt-BR', { hour12: false });
-    const code = `PG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-
-    const newRecordRow = {
-      id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      staff_id: staffId,
-      staff_name: staffData?.name || 'Professor',
-      staff_role: staffData?.role || 'Professor',
-      date,
-      time,
-      timestamp: now.getTime(),
-      type,
-      location: location || 'OG FITNESS',
-      notes: notes || null,
-      code,
-    };
-
-    const { error: insertError } = await supabase.from('time_records').insert(newRecordRow);
-    if (insertError) {
-      throw rpcErr instanceof Error ? rpcErr : new Error('Falha ao registrar batida de ponto.');
-    }
-
-    return {
-      id: newRecordRow.id,
-      staffId: newRecordRow.staff_id,
-      staffName: newRecordRow.staff_name,
-      staffRole: newRecordRow.staff_role,
-      date: newRecordRow.date,
-      time: newRecordRow.time,
-      timestamp: newRecordRow.timestamp,
-      type: newRecordRow.type,
-      location: newRecordRow.location,
-      notes: newRecordRow.notes || undefined,
-      code: newRecordRow.code,
-    };
-  }
+  const { data, error } = await getSupabase().rpc('register_shared_punch', {
+    p_staff_id: staffId,
+    p_type: type,
+    p_location: location,
+    p_notes: notes ?? null,
+    p_token: token ?? null,
+  }).single();
+  throwOnError(error);
+  return mapTimeRecord(data as TimeRecordRow);
 }
 
 export async function saveHoliday(holiday: Holiday): Promise<void> {
@@ -394,7 +321,7 @@ export async function importLocalPayrollData(
     active: staff.active,
     scheduled_shift: staff.scheduledShift,
   }));
-  const { error: staffError } = await supabase.from('staff').upsert(staffRows);
+  const { error: staffError } = await supabase.rpc('save_manager_staff', { p_staff: staffRows });
   throwOnError(staffError);
 
   const payrollRows = staffList

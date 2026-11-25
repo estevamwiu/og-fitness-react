@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { 
   BarChart3, 
@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { GymSettings, StaffMember, OccupancyCount, TimeRecord, Holiday } from './types';
 import { storage } from './utils/storage';
-import { formatDateKey, generateReceiptCode } from './utils/timeUtils';
+import { formatDateKey } from './utils/timeUtils';
 import { Header } from './components/Header';
 import { LoginView } from './components/LoginView';
 import {
@@ -29,6 +29,10 @@ import {
   fetchProfile,
   fetchStaff,
   fetchTimeRecords,
+  fetchOccupancy,
+  saveOccupancyCount,
+  importOccupancyCounts,
+  type ProfessorSession,
   getSupabase,
   importLocalPayrollData,
   isSupabaseConfigured,
@@ -55,19 +59,23 @@ const StaffManagementView = lazy(() => import('./components/StaffManagementView'
 const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
 
 const THEME_STORAGE_KEY = 'condogym_theme_v1';
-const PROFESSOR_SESSION_KEY = 'ogfitness_active_professor';
+const PROFESSOR_SESSION_KEY = 'ogfitness_staff_device_session';
 
 export default function App() {
   const [settings, setSettings] = useState<GymSettings>(() => storage.getSettings());
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
-  const [occupancyCounts, setOccupancyCounts] = useState<OccupancyCount[]>(() => storage.getOccupancy());
+  const [occupancyCounts, setOccupancyCounts] = useState<OccupancyCount[]>([]);
+  const [localCounts, setLocalCounts] = useState(() => storage.getOccupancy());
+  const [isImportingCounts, setIsImportingCounts] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const writeVersion = useRef(0);
   const [timeRecords, setTimeRecords] = useState<TimeRecord[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
   // Professor session via username and 6-digit PIN
-  const [professorUser, setProfessorUser] = useState<StaffMember | null>(() => {
+  const [professorSession, setProfessorSession] = useState<ProfessorSession | null>(() => {
     try {
       const stored = sessionStorage.getItem(PROFESSOR_SESSION_KEY);
       return stored ? JSON.parse(stored) : null;
@@ -75,6 +83,9 @@ export default function App() {
       return null;
     }
   });
+
+  const professorUser = professorSession?.staff ?? null;
+  const staffToken = professorSession?.token;
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -188,7 +199,7 @@ export default function App() {
       try {
         const [staff, records, customHolidays, gymSettings] = await Promise.all([
           fetchStaff(isManager).catch(() => storage.getStaff()),
-          fetchTimeRecords().catch(() => storage.getTimeRecords()),
+          fetchTimeRecords(staffToken).catch(() => []),
           isManager ? fetchHolidays().catch(() => []) : Promise.resolve([]),
           fetchGymSettings().catch(() => null),
         ]);
@@ -196,7 +207,7 @@ export default function App() {
         if (active) {
           setProfile(activeProfile);
           setStaffList(staff);
-          setTimeRecords(records && records.length > 0 ? records : storage.getTimeRecords());
+          setTimeRecords(records);
           setHolidays(customHolidays);
           if (gymSettings) setSettings(gymSettings);
           if (!isManager) {
@@ -208,7 +219,7 @@ export default function App() {
           // Fallback to local storage
           setProfile(activeProfile);
           setStaffList(storage.getStaff());
-          setTimeRecords(storage.getTimeRecords());
+          setTimeRecords([]);
           if (!isManager) setActiveTab('dashboard');
         }
       } finally {
@@ -221,7 +232,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [session, professorUser]);
+  }, [session, professorUser, staffToken]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -268,59 +279,74 @@ export default function App() {
     setStaffList(await fetchStaff(true));
   };
 
-  const handleSaveCount = (newCount: OccupancyCount) => {
-    const existingIndex = occupancyCounts.findIndex((c) => c.id === newCount.id);
-    let updated: OccupancyCount[];
-    if (existingIndex >= 0) {
-      updated = [...occupancyCounts];
-      updated[existingIndex] = newCount;
-    } else {
-      const slotIndex = occupancyCounts.findIndex(
-        (c) => c.date === newCount.date && c.timeSlot === newCount.timeSlot
-      );
-      if (slotIndex >= 0) {
-        updated = [...occupancyCounts];
-        updated[slotIndex] = newCount;
-      } else {
-        updated = [newCount, ...occupancyCounts];
-      }
+  useEffect(() => {
+    if (!profile) {
+      setOccupancyCounts([]);
+      setCloudError(null);
+      return;
     }
-    setOccupancyCounts(updated);
-    storage.saveOccupancy(updated);
+    let active = true;
+    let running = false;
+    const refresh = async () => {
+      if (running) return;
+      running = true;
+      const version = writeVersion.current;
+      try {
+        const [counts, records] = await Promise.all([fetchOccupancy(staffToken), fetchTimeRecords(staffToken)]);
+        if (active && version === writeVersion.current) {
+          setOccupancyCounts(counts);
+          setTimeRecords(records);
+          setCloudError(null);
+        }
+      } catch (reason) {
+        if (active) setCloudError(reason instanceof Error ? reason.message : 'Falha ao sincronizar com o Supabase.');
+      } finally {
+        running = false;
+      }
+    };
+    void refresh();
+    window.addEventListener('focus', refresh);
+    const interval = window.setInterval(refresh, 30_000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(interval);
+    };
+  }, [profile, staffToken]);
+
+  const handleSaveCount = async (count: OccupancyCount) => {
+    const saved = await saveOccupancyCount(count, staffToken);
+    writeVersion.current++;
+    setOccupancyCounts((counts) => [
+      saved,
+      ...counts.filter((item) => item.date !== saved.date || item.timeSlot !== saved.timeSlot),
+    ]);
+  };
+
+  const handleImportCounts = async () => {
+    setIsImportingCounts(true);
+    try {
+      await importOccupancyCounts(localCounts);
+      const counts = await fetchOccupancy(staffToken);
+      writeVersion.current++;
+      setOccupancyCounts(counts);
+      storage.saveOccupancy([]);
+      setLocalCounts([]);
+      setCloudError(null);
+    } catch (reason) {
+      setCloudError(reason instanceof Error ? reason.message : 'Não foi possível importar as contagens.');
+    } finally {
+      setIsImportingCounts(false);
+    }
   };
 
   const handleSaveTimeRecord = async (
     record: Pick<TimeRecord, 'staffId' | 'type' | 'location' | 'notes'>,
   ): Promise<TimeRecord> => {
-    if (record.type !== 'ENTRADA' && record.type !== 'SAIDA') {
-      throw new Error('Tipo de batida inválido.');
-    }
-    try {
-      const savedRecord = await registerTimePunch(record.staffId, record.type, record.location, record.notes);
-      setTimeRecords((records) => [savedRecord, ...records]);
-      return savedRecord;
-    } catch {
-      // Fallback local punch if offline or pending schema
-      const staff = staffList.find((s) => s.id === record.staffId);
-      const now = new Date();
-      const newRecord: TimeRecord = {
-        id: `tr-${Date.now()}`,
-        staffId: record.staffId,
-        staffName: staff?.name || 'Professor',
-        staffRole: staff?.role || 'Professor',
-        date: formatDateKey(now),
-        time: now.toLocaleTimeString('pt-BR', { hour12: false }),
-        timestamp: now.getTime(),
-        type: record.type,
-        location: record.location,
-        notes: record.notes,
-        code: generateReceiptCode(),
-      };
-      const updated = [newRecord, ...timeRecords];
-      setTimeRecords(updated);
-      storage.saveTimeRecords(updated);
-      return newRecord;
-    }
+    const saved = await registerTimePunch(record.staffId, record.type, record.location, record.notes, staffToken);
+    writeVersion.current++;
+    setTimeRecords((records) => [saved, ...records.filter((item) => item.id !== saved.id)]);
+    return saved;
   };
 
   const handleSaveHoliday = async (holiday: Holiday) => {
@@ -370,13 +396,14 @@ export default function App() {
   };
 
   // Login handler for Professor (Username + 6-digit PIN)
-  const handleStaffLoggedIn = (staff: StaffMember) => {
+  const handleStaffLoggedIn = (newSession: ProfessorSession) => {
+    const { staff } = newSession;
     try {
-      sessionStorage.setItem(PROFESSOR_SESSION_KEY, JSON.stringify(staff));
+      sessionStorage.setItem(PROFESSOR_SESSION_KEY, JSON.stringify(newSession));
     } catch {
       // Storage unavailable
     }
-    setProfessorUser(staff);
+    setProfessorSession(newSession);
     setProfile({
       id: staff.id,
       role: 'professor',
@@ -394,7 +421,7 @@ export default function App() {
     } catch {
       // Storage unavailable
     }
-    setProfessorUser(null);
+    setProfessorSession(null);
     setProfile(null);
     if (session) {
       const { error } = await getSupabase().auth.signOut();
@@ -469,6 +496,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 space-y-6">
+        {cloudError && <p role="alert" className="rounded-lg border border-[#ff4444]/30 p-3 text-sm text-[#ff9999]">{cloudError}</p>}
+        {isManager && localCounts.length > 0 && (
+          <button type="button" disabled={isImportingCounts} onClick={handleImportCounts}
+            className="rounded-lg border border-[#00F201]/40 px-3 py-2 text-sm">
+            {isImportingCounts ? 'Importando...' : 'Importar contagens deste navegador'}
+          </button>
+        )}
         {authError && (
           <p role="alert" className="rounded-lg border border-[#ff4444]/30 bg-[#ff4444]/10 p-3 text-xs text-[#ff9999]">
             {authError}

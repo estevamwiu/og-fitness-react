@@ -20,7 +20,7 @@ import { soundEffects } from '../utils/audioAlert';
 interface OccupancyQuickCounterProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveCount: (count: OccupancyCount) => void;
+  onSaveCount: (count: OccupancyCount) => Promise<void>;
   settings: GymSettings;
   staffList: StaffMember[];
   currentStaffId?: string;
@@ -43,12 +43,14 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
   const [selectedDate, setSelectedDate] = useState(initialDate || formatDateKey(new Date()));
   const [selectedSlot, setSelectedSlot] = useState(initialSlot || getClosest30MinSlot());
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
   // Zone counts
-  const [musculacao, setMusculacao] = useState(8);
-  const [cardio, setCardio] = useState(5);
-  const [funcional, setFuncional] = useState(2);
+  const [musculacao, setMusculacao] = useState(0);
+  const [cardio, setCardio] = useState(0);
+  const [funcional, setFuncional] = useState(0);
   const [outros, setOutros] = useState(0);
 
   // Sync with existing record if editing
@@ -91,7 +93,8 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
     setMusculacao((prev) => Math.max(0, prev + amount));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) return;
     let status: OccupancyCount['status'] = 'normal';
     if (totalCount >= settings.maxCapacity) status = 'lotado';
     else if (totalCount >= settings.warningCapacity) status = 'alerta';
@@ -115,12 +118,17 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
       status,
     };
 
-    if (settings.soundAlertEnabled) {
-      soundEffects.playSuccessSound();
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSaveCount(countRecord);
+      if (settings.soundAlertEnabled) soundEffects.playSuccessSound();
+      onClose();
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Não foi possível salvar a contagem. Tente novamente.');
+    } finally {
+      setIsSaving(false);
     }
-
-    onSaveCount(countRecord);
-    onClose();
   };
 
   return (
@@ -160,6 +168,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
               <input
                 type="date"
                 value={selectedDate}
+                disabled={Boolean(existingRecord) || isSaving}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F201] font-mono cursor-pointer"
               />
@@ -171,6 +180,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
               </label>
               <select
                 value={selectedSlot}
+                disabled={Boolean(existingRecord) || isSaving}
                 onChange={(e) => setSelectedSlot(e.target.value)}
                 className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F201] font-mono font-bold cursor-pointer"
               >
@@ -397,6 +407,8 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
           </div>
         </div>
 
+        {saveError && <p role="alert" className="px-4 py-2 text-sm text-[#ff7777]">{saveError}</p>}
+
         {/* Modal Footer */}
         <div className="p-4 bg-[#0d0d0d] border-t border-[#2a2a2a] flex items-center justify-end gap-3">
           <button
@@ -409,11 +421,12 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
           <button
             type="button"
             onClick={handleSave}
+            disabled={isSaving || !selectedDate || !selectedSlot}
             className="flex items-center gap-2 px-5 py-2 bg-[#00F201] hover:bg-[#00cc01] text-black font-bold rounded-lg text-xs shadow-md shadow-[#00F201]/20 transition-all active:scale-95"
             id="btn-save-occupancy-count"
           >
             <Check className="w-4 h-4" />
-            <span>Salvar Contagem ({selectedSlot})</span>
+            <span>{isSaving ? 'Salvando...' : `Salvar Contagem (${selectedSlot})`}</span>
           </button>
         </div>
       </div>
