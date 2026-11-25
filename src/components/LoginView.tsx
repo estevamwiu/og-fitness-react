@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Dumbbell, LockKeyhole, Mail, User, ShieldCheck, Eye, EyeOff, Hash, Delete } from 'lucide-react';
+import { LockKeyhole, Mail, User, ShieldCheck, Eye, EyeOff, Hash, Delete } from 'lucide-react';
+import ogFitnessLogo from '../assets/og-fitness-logo.png';
 import { getSupabase, verifyStaffLogin, isSupabaseConfigured } from '../utils/supabase';
 import type { ProfessorSession } from '../utils/supabase';
 
@@ -102,10 +103,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn }) => {
       <div className="w-full max-w-md bg-[#141414] border border-[#2a2a2a] rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl shadow-black/60">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-[#00F201] text-black flex items-center justify-center font-black text-xl shadow-lg shadow-[#00F201]/20">
-            <Dumbbell className="w-7 h-7" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">OG FITNESS</h1>
+          <h1 className="login-logo relative mx-auto aspect-[3/2] w-48 max-w-full overflow-hidden sm:w-52">
+            <img
+              src={ogFitnessLogo}
+              alt="OG Fitness"
+              className="absolute left-1/2 top-1/2 w-[185%] max-w-none -translate-x-1/2 -translate-y-1/2"
+            />
+          </h1>
           <p className="text-xs text-[#777]">Sistema de Ponto Eletrônico & Fechamento de Horas</p>
         </div>
 

@@ -97,3 +97,12 @@
 :root[data-theme="light"] .recharts-cartesian-grid line {
   stroke: #cbd5e1 !important;
 }
+.login-logo {
+  filter: grayscale(1) contrast(6) invert(1);
+  mix-blend-mode: screen;
+}
+
+:root[data-theme="light"] .login-logo {
+  filter: grayscale(1) contrast(6);
+  mix-blend-mode: multiply;
+}
