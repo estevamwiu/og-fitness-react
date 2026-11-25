@@ -70,7 +70,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     setEditingStaff(staff);
     setName(staff.name);
     setUsername(staff.username || '');
-    setPin(staff.pin || '');
+    setPin('');
     setRole(staff.role);
     setEmail(staff.email || '');
     setPhone(staff.phone || '');
@@ -105,7 +105,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     const cleanUsername = username.trim().toLowerCase() || name.trim().toLowerCase().replace(/\s+/g, '.');
     const cleanPin = pin.trim().replace(/\D/g, '');
 
-    if (cleanPin.length !== 6) {
+    if ((!editingStaff || cleanPin) && cleanPin.length !== 6) {
       setSaveError('O PIN de acesso deve conter exatamente 6 números (ex: 123456).');
       return;
     }
@@ -125,7 +125,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
         active: editingStaff?.active ?? true,
         name: name.trim(),
         username: cleanUsername,
-        pin: cleanPin,
+        pin: cleanPin || undefined,
         role,
         email: derivedEmail,
         phone: phone.trim() || undefined,
@@ -258,7 +258,6 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                     </span>
                     <div className="font-mono text-right">
                       <span className="text-white font-semibold">@{staff.username || 'usuario'}</span>
-                      <span className="text-[#777] ml-2">PIN: {staff.pin || '••••••'}</span>
                     </div>
                   </div>
 
@@ -386,12 +385,13 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                   <div>
                     <label className="block text-[#777] font-semibold mb-1">PIN (6 números)</label>
                     <input
-                      type="text"
+                      type="password"
                       inputMode="numeric"
                       pattern="[0-9]*"
                       maxLength={6}
-                      required
-                      placeholder="123456"
+                      required={!editingStaff}
+                      autoComplete="new-password"
+                      placeholder={editingStaff ? 'Vazio mantém o PIN atual' : 'Digite seis dígitos'}
                       value={pin}
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                       className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono tracking-widest text-xs focus:border-[#00F201] focus:outline-none"

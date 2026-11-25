@@ -5,6 +5,10 @@ const STAFF_KEY = 'condogym_staff_v1';
 const OCCUPANCY_KEY = 'condogym_occupancy_v1';
 const TIME_RECORDS_KEY = 'condogym_time_records_v1';
 
+function stripStaffPin({ pin: _pin, ...staff }: StaffMember): StaffMember {
+  return staff;
+}
+
 export const DEFAULT_SETTINGS: GymSettings = {
   gymName: 'OG Fitness',
   condoName: 'Condomínio',
@@ -60,13 +64,22 @@ export const storage = {
   },
 
   getStaff(): StaffMember[] {
-    return readRecords<StaffMember>(STAFF_KEY, (staff) =>
+    const records = readRecords<StaffMember>(STAFF_KEY, (staff) =>
       demoStaff.has(staff.id) && demoStaff.get(staff.id) === staff.username,
-    ).map((staff) => ({ ...staff, hourlyRate: staff.hourlyRate ?? 0 }));
+    );
+    const staff = records.map((member) => ({ ...stripStaffPin(member), hourlyRate: member.hourlyRate ?? 0 }));
+    if (records.some((member) => 'pin' in member)) {
+      try {
+        this.saveStaff(staff);
+      } catch {
+        // Storage may be unavailable.
+      }
+    }
+    return staff;
   },
 
   saveStaff(staff: StaffMember[]) {
-    localStorage.setItem(STAFF_KEY, JSON.stringify(staff));
+    localStorage.setItem(STAFF_KEY, JSON.stringify(staff.map(stripStaffPin)));
   },
 
   getOccupancy(): OccupancyCount[] {

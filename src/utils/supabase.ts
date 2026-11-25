@@ -38,7 +38,6 @@ interface StaffRow {
   id: string;
   name: string;
   username?: string | null;
-  pin?: string | null;
   role: StaffMember['role'];
   email: string | null;
   phone: string | null;
@@ -76,15 +75,12 @@ export async function fetchProfile(userId: string): Promise<UserProfile> {
   return { id: data.id, role: data.role, staffId: data.staff_id };
 }
 
-export async function fetchStaff(isManager: boolean): Promise<StaffMember[]> {
+export async function fetchStaff(isManager: boolean, token?: string): Promise<StaffMember[]> {
   const supabase = getSupabase();
   const [{ data: staffRows, error: staffError }, payrollResult, profilesResult] = await Promise.all([
     isManager
       ? supabase.rpc('read_manager_staff')
-      : supabase
-        .from('staff')
-        .select('id, name, username, role, email, phone, color, active, scheduled_shift')
-        .order('name'),
+      : supabase.rpc('read_own_staff', { p_token: token ?? null }),
     isManager
       ? supabase.from('staff_payroll').select('staff_id, hourly_rate')
       : Promise.resolve({ data: [], error: null }),
@@ -104,7 +100,6 @@ export async function fetchStaff(isManager: boolean): Promise<StaffMember[]> {
     name: row.name,
     username: row.username || undefined,
     role: row.role,
-    pin: isManager ? row.pin || undefined : undefined,
     email: row.email || undefined,
     phone: row.phone || undefined,
     color: row.color,
@@ -138,8 +133,14 @@ export async function verifyStaffLogin(username: string, pin: string): Promise<P
     p_pin: pin.trim(),
   });
   throwOnError(error);
+  if (data?.throttled) throw new Error('Limite de tentativas atingido. Tente novamente em até 15 minutos.');
   if (!data?.success || !data.token) return null;
   return { staff: { ...data.staff, active: true }, token: data.token };
+}
+
+export async function endProfessorSession(token: string): Promise<void> {
+  const { error } = await getSupabase().rpc('end_staff_device_session', { p_token: token });
+  throwOnError(error);
 }
 
 export async function fetchOccupancy(token?: string): Promise<OccupancyCount[]> {
@@ -253,10 +254,10 @@ export async function deleteStaff(staffId: string): Promise<void> {
   if (!data) throw new Error('Colaborador não encontrado ou sem permissão para excluir.');
 }
 
-export async function fetchGymSettings(): Promise<GymSettings | null> {
-  const { data, error } = await getSupabase().from('app_config').select('value').eq('key', 'gym_settings').maybeSingle();
+export async function fetchGymSettings(token?: string): Promise<GymSettings | null> {
+  const { data, error } = await getSupabase().rpc('read_gym_settings', { p_token: token ?? null });
   throwOnError(error);
-  return data?.value ?? null;
+  return data ?? null;
 }
 
 export async function saveGymSettings(settings: GymSettings): Promise<void> {

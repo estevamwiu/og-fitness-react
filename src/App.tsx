@@ -24,6 +24,7 @@ import { Header } from './components/Header';
 import { LoginView } from './components/LoginView';
 import {
   deleteHoliday,
+  endProfessorSession,
   fetchHolidays,
   fetchPayrollMigrationStatus,
   fetchProfile,
@@ -198,10 +199,10 @@ export default function App() {
 
       try {
         const [staff, records, customHolidays, gymSettings] = await Promise.all([
-          fetchStaff(isManager).catch(() => storage.getStaff()),
+          fetchStaff(isManager, staffToken).catch(() => isManager ? [] : professorUser ? [professorUser] : []),
           fetchTimeRecords(staffToken).catch(() => []),
           isManager ? fetchHolidays().catch(() => []) : Promise.resolve([]),
-          fetchGymSettings().catch(() => null),
+          fetchGymSettings(staffToken).catch(() => null),
         ]);
 
         if (active) {
@@ -218,7 +219,7 @@ export default function App() {
         if (active) {
           // Fallback to local storage
           setProfile(activeProfile);
-          setStaffList(storage.getStaff());
+          setStaffList(professorUser ? [professorUser] : []);
           setTimeRecords([]);
           if (!isManager) setActiveTab('dashboard');
         }
@@ -250,9 +251,10 @@ export default function App() {
 
   const handleSaveStaff = async (staff: StaffMember) => {
     await saveStaff([staff]);
+    const { pin: _pin, ...savedStaff } = staff;
     const updated = staffList.some((member) => member.id === staff.id)
-      ? staffList.map((member) => member.id === staff.id ? staff : member)
-      : [...staffList, staff];
+      ? staffList.map((member) => member.id === staff.id ? savedStaff : member)
+      : [...staffList, savedStaff];
     setStaffList(updated);
     storage.saveStaff(updated);
   };
@@ -423,6 +425,13 @@ export default function App() {
     }
     setProfessorSession(null);
     setProfile(null);
+    if (staffToken) {
+      try {
+        await endProfessorSession(staffToken);
+      } catch {
+        setAuthError('Você saiu deste navegador, mas não foi possível encerrar a sessão no servidor.');
+      }
+    }
     if (session) {
       const { error } = await getSupabase().auth.signOut();
       if (error) setAuthError(error.message);
