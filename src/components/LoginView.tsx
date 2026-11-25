@@ -285,16 +285,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onStaffLoggedIn, theme, on
         {/* GESTOR (MANAGER) LOGIN FORM */}
         {loginMode === 'manager' && (
           <form onSubmit={handleManagerSubmit} className="space-y-4">
-            <div className="p-3 bg-[#0d0d0d] rounded-xl border border-[#222] text-[11px] text-[#888] space-y-1">
-              <div className="flex items-center gap-1.5 font-semibold text-white">
-                <ShieldCheck className="w-4 h-4 text-[#00F201]" />
-                <span>Área Restrita aos 2 Gestores</span>
-              </div>
-              <p>
-                Acesso com e-mail corporativo para conferência de relatórios, equipe, valores/hora e fechamento salarial mensal.
-              </p>
-            </div>
-
             <div className="space-y-1">
               <label className="text-xs font-medium text-[#aaa]">E-mail do Gestor</label>
               <div className="flex items-center gap-2 bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl px-3.5 focus-within:border-[#00F201] transition-colors">
