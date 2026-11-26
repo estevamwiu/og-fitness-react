@@ -22,6 +22,7 @@ import { storage } from './utils/storage';
 import { formatDateKey } from './utils/timeUtils';
 import { Header } from './components/Header';
 import { LoginView } from './components/LoginView';
+import { ManagerMfaView } from './components/ManagerMfaView';
 import {
   deleteHoliday,
   endProfessorSession,
@@ -74,6 +75,7 @@ export default function App() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [mfaUserId, setMfaUserId] = useState<string | null>(null);
 
   // Professor session via username and 6-digit PIN
   const [professorSession, setProfessorSession] = useState<ProfessorSession | null>(() => {
@@ -156,6 +158,7 @@ export default function App() {
   // Load user profile and data (works for both Manager Auth and Professor PIN login)
   useLayoutEffect(() => {
     if (!session && !professorUser) {
+      setMfaUserId(null);
       setProfile(null);
       setStaffList([]);
       setTimeRecords([]);
@@ -186,8 +189,24 @@ export default function App() {
         try {
           activeProfile = await fetchProfile(session.user.id);
           isManager = activeProfile.role === 'manager';
+          if (isManager) {
+            const { data, error } = await getSupabase().auth.mfa.getAuthenticatorAssuranceLevel(session.access_token);
+            if (error) throw error;
+            if (!active) return;
+            if (data.currentLevel !== 'aal2') {
+              setProfile(null);
+              setStaffList([]);
+              setTimeRecords([]);
+              setHolidays([]);
+              setMfaUserId(session.user.id);
+              setIsDataLoading(false);
+              return;
+            }
+          }
         } catch (reason) {
           if (active) {
+            setMfaUserId(null);
+            setProfile(null);
             setDataError(reason instanceof Error ? reason.message : 'Não foi possível verificar o perfil.');
             setIsDataLoading(false);
           }
@@ -197,6 +216,7 @@ export default function App() {
         return;
       }
 
+      if (active) setMfaUserId(null);
       try {
         const [staff, records, customHolidays, gymSettings] = await Promise.all([
           fetchStaff(isManager, staffToken).catch(() => isManager ? [] : professorUser ? [professorUser] : []),
@@ -468,6 +488,10 @@ export default function App() {
         {authError && <p role="alert" className="fixed bottom-4 left-4 right-4 text-center text-sm text-[#ff7777]">{authError}</p>}
       </>
     );
+  }
+
+  if (!professorUser && session && mfaUserId === session.user.id) {
+    return <ManagerMfaView key={session.user.id} onSignOut={handleSignOut} />;
   }
 
   if (isDataLoading) {
