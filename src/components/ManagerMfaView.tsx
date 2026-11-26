@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { getSupabase } from '../utils/supabase';
 
 interface ManagerMfaViewProps {
@@ -82,7 +82,7 @@ export function ManagerMfaView({ onSignOut }: ManagerMfaViewProps) {
     }
   };
 
-  const buttonClass = 'rounded-xl bg-[#00F201] px-4 py-2 font-semibold text-black disabled:opacity-60';
+  const buttonClass = 'block w-full rounded-xl bg-[#00F201] px-4 py-2 font-semibold text-black disabled:opacity-60';
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#0a0a0a] p-4 text-[#e0e0e0]">
@@ -144,7 +144,17 @@ export function ManagerMfaView({ onSignOut }: ManagerMfaViewProps) {
           </form>
         )}
         {error && <p role="alert" className="text-sm text-[#ff7777]">{error}</p>}
-        <button type="button" className="text-sm underline" onClick={onSignOut} disabled={busy}>Voltar ao login</button>
+        <div className="flex justify-center border-t border-[#2a2a2a] pt-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:underline focus-visible:outline-2 focus-visible:outline-[#00F201] disabled:opacity-60"
+            onClick={onSignOut}
+            disabled={busy}
+          >
+            <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+            Voltar ao login
+          </button>
+        </div>
       </section>
     </main>
   );
