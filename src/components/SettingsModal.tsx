@@ -122,7 +122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Capacidade e Limites de Alunos</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <div>
                 <label className="block text-[#777] font-medium mb-1">Capacidade Máxima</label>
                 <input
@@ -132,7 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   required
                   value={formData.maxCapacity}
                   onChange={(e) => setFormData({ ...formData, maxCapacity: Number(e.target.value) })}
-                  className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono font-bold text-xs focus:border-[#00F201] focus:outline-none"
+                  className="h-9 w-full min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono font-bold text-xs focus:border-[#00F201] focus:outline-none"
                 />
               </div>
 
@@ -145,7 +145,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   required
                   value={formData.warningCapacity}
                   onChange={(e) => setFormData({ ...formData, warningCapacity: Number(e.target.value) })}
-                  className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono font-bold text-xs focus:border-[#00F201] focus:outline-none"
+                  className="h-9 w-full min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono font-bold text-xs focus:border-[#00F201] focus:outline-none"
                 />
               </div>
             </div>
@@ -158,7 +158,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Horário de Funcionamento (Grade de 30min)</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <div>
                 <label className="block text-[#777] font-medium mb-1">Abertura da Academia</label>
                 <input
@@ -166,7 +166,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   required
                   value={formData.openingTime}
                   onChange={(e) => setFormData({ ...formData, openingTime: e.target.value })}
-                  className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-[#00F201] focus:outline-none"
+                  className="h-9 w-full min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-[#00F201] focus:outline-none"
                 />
               </div>
 
@@ -177,7 +177,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   required
                   value={formData.closingTime}
                   onChange={(e) => setFormData({ ...formData, closingTime: e.target.value })}
-                  className="w-full bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-[#00F201] focus:outline-none"
+                  className="h-9 w-full min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white font-mono text-xs focus:border-[#00F201] focus:outline-none"
                 />
               </div>
             </div>

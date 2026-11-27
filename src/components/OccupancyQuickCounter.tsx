@@ -6,9 +6,6 @@ import {
   Check, 
   X, 
   Dumbbell, 
-  Flame, 
-  Activity, 
-  Sparkles, 
   Clock, 
   UserCheck, 
   AlertCircle 
@@ -47,11 +44,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
-  // Zone counts
-  const [musculacao, setMusculacao] = useState(0);
-  const [cardio, setCardio] = useState(0);
-  const [funcional, setFuncional] = useState(0);
-  const [outros, setOutros] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Sync with existing record if editing
   useEffect(() => {
@@ -60,27 +53,17 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
       setSelectedSlot(existingRecord.timeSlot);
       setSelectedStaffId(existingRecord.loggedByStaffId || staffList[0]?.id || '');
       setNotes(existingRecord.notes || '');
-      if (existingRecord.breakdown) {
-        setMusculacao(existingRecord.breakdown.musculacao || 0);
-        setCardio(existingRecord.breakdown.cardio || 0);
-        setFuncional(existingRecord.breakdown.funcional || 0);
-        setOutros(existingRecord.breakdown.outros || 0);
-      } else {
-        setMusculacao(Math.round(existingRecord.count * 0.5));
-        setCardio(Math.round(existingRecord.count * 0.3));
-        setFuncional(Math.round(existingRecord.count * 0.2));
-        setOutros(0);
-      }
+      setTotalCount(existingRecord.count);
     } else {
       setSelectedDate(initialDate || formatDateKey(new Date()));
       setSelectedSlot(initialSlot || getClosest30MinSlot());
       setNotes('');
+      setTotalCount(0);
     }
   }, [existingRecord, initialSlot, initialDate, staffList]);
 
   if (!isOpen) return null;
 
-  const totalCount = Math.max(0, musculacao + cardio + funcional + outros);
   const occupancyPercentage = Math.round((totalCount / settings.maxCapacity) * 100);
   const isOverCapacity = totalCount >= settings.maxCapacity;
   const isWarning = totalCount >= settings.warningCapacity;
@@ -89,8 +72,7 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
   const selectedStaff = staffList.find((s) => s.id === (currentStaffId ?? selectedStaffId)) || staffList[0];
 
   const handleQuickAdd = (amount: number) => {
-    // Add to musculacao by default or distribute
-    setMusculacao((prev) => Math.max(0, prev + amount));
+    setTotalCount((prev) => Math.max(0, prev + amount));
   };
 
   const handleSave = async () => {
@@ -106,12 +88,9 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
       timestamp: new Date(`${selectedDate}T${selectedSlot}:00`).getTime() || Date.now(),
       count: totalCount,
       maxCapacity: settings.maxCapacity,
-      breakdown: {
-        musculacao,
-        cardio,
-        funcional,
-        outros,
-      },
+      breakdown: existingRecord?.count === totalCount && existingRecord.breakdown
+        ? existingRecord.breakdown
+        : { musculacao: totalCount, cardio: 0, funcional: 0, outros: 0 },
       loggedByStaffId: selectedStaff?.id || 'unknown',
       loggedByStaffName: selectedStaff?.name || 'Professor',
       notes: notes.trim(),
@@ -195,8 +174,12 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
 
           {/* Big Occupancy Display */}
           <div className="text-center bg-[#0d0d0d] p-4 rounded-xl border border-[#2a2a2a] relative overflow-hidden">
-            <div className="text-xs text-[#777] font-semibold uppercase tracking-wider">TOTAL DE ALUNOS PRESENTES</div>
-            <div className="flex items-center justify-center gap-3 my-2">
+            <div className="flex items-center justify-center gap-2 font-semibold text-white">
+              <Dumbbell className="size-4 text-[#00F201]" aria-hidden="true" />
+              Musculação
+            </div>
+            <p className="mt-1 text-xs text-[#777]">Total de alunos presentes em toda a academia</p>
+            <div className="flex items-center justify-center gap-2 my-3">
               <button
                 type="button"
                 onClick={() => handleQuickAdd(-5)}
@@ -205,9 +188,25 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
               >
                 -5
               </button>
-              <span className="font-mono text-5xl font-extrabold text-white tracking-tight">
+              <button
+                type="button"
+                onClick={() => handleQuickAdd(-1)}
+                className="grid size-8 place-items-center rounded-lg border border-[#333] bg-[#1a1a1a] text-[#ccc]"
+                aria-label="Subtrair um aluno"
+              >
+                <Minus className="size-4" aria-hidden="true" />
+              </button>
+              <span className="font-mono text-4xl font-bold text-white tabular-nums">
                 {totalCount}
               </span>
+              <button
+                type="button"
+                onClick={() => handleQuickAdd(1)}
+                className="grid size-8 place-items-center rounded-lg border border-[#00F201]/30 bg-[#1a1a1a] text-[#00F201]"
+                aria-label="Adicionar um aluno"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 onClick={() => handleQuickAdd(5)}
@@ -238,136 +237,6 @@ export const OccupancyQuickCounter: React.FC<OccupancyQuickCounterProps> = ({
                   <span>Capacidade máxima atingida ou excedida!</span>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Breakdown per Zone */}
-          <div className="space-y-2">
-            <div className="text-[11px] font-semibold text-[#777] uppercase tracking-wider flex items-center justify-between">
-              <span>Distribuição por Áreas da Academia</span>
-              <span className="text-[10px] text-[#555] font-normal">Ajuste individual</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Musculação */}
-              <div className="bg-[#0d0d0d] p-2.5 rounded-xl border border-[#2a2a2a] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-[#00F201]/10 text-[#00F201]">
-                    <Dumbbell className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-white">{settings.zones.musculacao}</div>
-                    <div className="text-[10px] text-[#777]">Pesos e Máquinas</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setMusculacao((p) => Math.max(0, p - 1))}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#ccc] border border-[#333] active:scale-95"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-7 text-center font-mono font-bold text-sm text-white">{musculacao}</span>
-                  <button
-                    type="button"
-                    onClick={() => setMusculacao((p) => p + 1)}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#00F201] border border-[#00F201]/30 active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Cardio */}
-              <div className="bg-[#0d0d0d] p-2.5 rounded-xl border border-[#2a2a2a] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-[#ffaa66]/10 text-[#ffaa66]">
-                    <Flame className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-white">{settings.zones.cardio}</div>
-                    <div className="text-[10px] text-[#777]">Esteiras e Bikes</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setCardio((p) => Math.max(0, p - 1))}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#ccc] border border-[#333] active:scale-95"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-7 text-center font-mono font-bold text-sm text-white">{cardio}</span>
-                  <button
-                    type="button"
-                    onClick={() => setCardio((p) => p + 1)}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#00F201] border border-[#00F201]/30 active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Funcional */}
-              <div className="bg-[#0d0d0d] p-2.5 rounded-xl border border-[#2a2a2a] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-[#E2E8F0]/10 text-[#E2E8F0]">
-                    <Activity className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-white">{settings.zones.funcional}</div>
-                    <div className="text-[10px] text-[#777]">Alongamento / Cross</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setFuncional((p) => Math.max(0, p - 1))}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#ccc] border border-[#333] active:scale-95"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-7 text-center font-mono font-bold text-sm text-white">{funcional}</span>
-                  <button
-                    type="button"
-                    onClick={() => setFuncional((p) => p + 1)}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#E2E8F0] border border-[#E2E8F0]/30 active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Outros / Aulas */}
-              <div className="bg-[#0d0d0d] p-2.5 rounded-xl border border-[#2a2a2a] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-[#888]/10 text-[#aaa]">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-white">{settings.zones.outros}</div>
-                    <div className="text-[10px] text-[#777]">Salas e Espaço Livre</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setOutros((p) => Math.max(0, p - 1))}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#ccc] border border-[#333] active:scale-95"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-7 text-center font-mono font-bold text-sm text-white">{outros}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOutros((p) => p + 1)}
-                    className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-[#252525] flex items-center justify-center text-[#aaa] border border-[#333] active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
